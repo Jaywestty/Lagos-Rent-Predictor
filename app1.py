@@ -1,10 +1,10 @@
 import streamlit as st
-import pickle
+import joblib
 import pandas as pd
 
 # Load model
 with open('Regressor.pkl', 'rb') as f:
-    model = pickle.load(f)
+    model = joblib.load(f)
 
 # Score map from original logic
 score_map = {
