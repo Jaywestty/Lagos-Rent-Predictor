@@ -6,7 +6,7 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
-import pickle
+import joblib
 
 #load data
 df = pd.read_csv('lagos-rent 3.csv')
@@ -119,7 +119,7 @@ numerical_transformer = Pipeline(steps=[
 
 categorical_transformer = Pipeline(steps=[
     ('Imputer', SimpleImputer(strategy='most_frequent')),
-    ('encoder', OneHotEncoder(handle_unknown='ignore', sparse_output=False))
+    ('encoder', OneHotEncoder(handle_unknown='ignore', sparse=False))
 ])
 
 preprocessor = ColumnTransformer(transformers=[
@@ -139,7 +139,7 @@ pipeline.fit(X_train, y_train)
 
 #Save the model
 with open('Regressor.pkl', 'wb') as f:
-    pickle.dump(pipeline, f)
+    joblib.dump(pipeline, f)
 print('Model saved succesfully')
 
 sample = pd.DataFrame([{
