@@ -47,13 +47,15 @@ Use this app to predict the estimated rent price of a house in Lagos based on pr
 
 st.subheader("📋 Property Features")
 
-# Binary inputs
-serviced = st.number_input("Is the property serviced? (1 = Yes, 0 = No)", min_value=0, max_value=1,
-                           help="Includes services like electricity, water, cleaning, etc.")
-newly_built = st.number_input("Is it newly built? (1 = Yes, 0 = No)", min_value=0, max_value=1,
-                              help="1 if the building is newly constructed.")
-furnished = st.number_input("Is it furnished? (1 = Yes, 0 = No)", min_value=0, max_value=1,
-                            help="1 if the house includes furniture like beds, chairs, etc.")
+# Convert Yes/No to 1/0
+def binary_input(label, help_text=""):
+    return 1 if st.selectbox(label, ['Yes', 'No'], help=help_text) == 'Yes' else 0
+
+# Binary inputs as Yes/No dropdowns
+serviced = binary_input("Is the property serviced?", "Includes services like electricity, water, cleaning, etc.")
+newly_built = binary_input("Is it newly built?", "1 if the building is newly constructed.")
+furnished = binary_input("Is it furnished?", "1 if the house includes furniture like beds, chairs, etc.")
+
 
 bedrooms = st.number_input("Number of Bedrooms", min_value=0, max_value=10)
 bathrooms = st.number_input("Number of Bathrooms", min_value=0, max_value=10)
