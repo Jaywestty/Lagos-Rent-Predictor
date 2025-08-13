@@ -16,3 +16,12 @@ A machine learning-powered web app that predicts estimated rental prices for hou
 * Visualization: Matplotlib, Seaborn
 * Deployment: Streamlit Cloud / Local
 
+**Project Structure**
+Lagos-Rent-Estimator/
+│
+├── data/                 # Dataset files
+├── notebooks/            # Jupyter/Colab notebooks for EDA & training
+├── app.py                # Streamlit app
+├── model.pkl             # Trained model file
+├── requirements.txt      # Python dependencies
+└── README.md             # Project documentation
