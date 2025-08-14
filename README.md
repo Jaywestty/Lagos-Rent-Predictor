@@ -25,4 +25,7 @@ A machine learning-powered web app that predicts estimated rental prices for hou
 ## Deployment
 
 The app is deployed on Streamlit Cloud for easy public access.
-You can try it live here: https://lagos-rent-predictor.streamlit.app/
+
+## Live App
+You can try the live version of the app here:  
+[**Click to open the app**](https://lagos-rent-predictor.streamlit.app/) 
