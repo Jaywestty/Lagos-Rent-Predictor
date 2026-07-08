@@ -1,0 +1,6 @@
+.vscode/settings.json
+data/raw/.checkpoint_npc_rent.json
+data/raw/.checkpoint_npc_sale.json
+data/raw/.checkpoint_propertypro_sale.json
+data/raw/.checkpoint_propertypro_rent.json
+data/raw/lagos_properties.csv
