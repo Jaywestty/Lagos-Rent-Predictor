@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lagos_rent_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lagos_rent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lagos_rent}
+      POSTGRES_DB: ${POSTGRES_DB:-lagos_rent}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - lagos_rent_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lagos_rent} -d ${POSTGRES_DB:-lagos_rent}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  lagos_rent_pgdata:
