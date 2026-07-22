@@ -4,3 +4,10 @@ data/raw/.checkpoint_npc_sale.json
 data/raw/.checkpoint_propertypro_sale.json
 data/raw/.checkpoint_propertypro_rent.json
 data/raw/lagos_properties.csv
+.env
+data/quality_report.json
+scripts/__pycache__/location_normalizer.cpython-310.pyc
+data/known_areas.json
+data/location_review_needed.csv
+scripts/check_dedup.py
+scripts/location_normalizer.py
