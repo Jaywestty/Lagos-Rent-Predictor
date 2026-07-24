@@ -8,6 +8,51 @@ import pandas as pd
 
 MIN_AREA_FREQUENCY = 2
 
+NOISE_TOKENS = {
+    "off", "by", "no", "no.", "str", "st", "st.", "road", "rd", "rd.",
+    "street", "estate", "behind", "junction", "close", "cl", "avenue",
+    "ave", "opposite", "opp", "beside", "along", "via", "gra", "phase",
+    "plot", "block", "house", "flat", "suite", "floor",
+}
+
+NOISE_PHRASES = [
+    "bus stop", "by road", "opposite to", "beside the", "along the",
+    "close to", "behind the", "off road", "by junction",
+]
+
+_UNIT_NUMBER_PATTERN = re.compile(r"\b\d+[a-z]?\b", flags=re.IGNORECASE)
+_PUNCTUATION_PATTERN = re.compile(r"[.,'\u2019]")
+_WHITESPACE_PATTERN = re.compile(r"\s+")
+
+
+def load_admin_suffixes(path):
+    if not path.exists():
+        return set()
+    with open(path, "r", encoding="utf-8") as f:
+        return set(json.load(f))
+
+
+def strip_known_admin_suffix(text, admin_suffixes):
+    lowered = text.lower()
+    for suffix in sorted(admin_suffixes, key=lambda s: -len(s.split())):
+        pattern = r"(?:^|\s)" + re.escape(suffix) + r"$"
+        match = re.search(pattern, lowered)
+        if match:
+            return text[: match.start()].strip()
+    return text
+
+
+def strip_noise_tokens(text):
+    lowered = text.lower()
+    for phrase in NOISE_PHRASES:
+        lowered = lowered.replace(phrase, " ")
+
+    cleaned = _PUNCTUATION_PATTERN.sub(" ", lowered)
+    cleaned = _UNIT_NUMBER_PATTERN.sub(" ", cleaned)
+    cleaned = _WHITESPACE_PATTERN.sub(" ", cleaned).strip()
+
+    tokens = [t for t in cleaned.split() if t not in NOISE_TOKENS]
+    return " ".join(tokens).title()
 
 def strip_trailing_lagos(text):
     return re.sub(r",?\s*lagos\s*$", "", text.strip(), flags=re.IGNORECASE).strip()
@@ -62,41 +107,64 @@ def extract_area_candidates(location_series):
     return multi_part_counter, single_part_values
 
 
-def match_single_part_against_known(single_part_values, known_areas):
+def _try_end_match(lowered_text, areas_by_word_count):
+    for area in areas_by_word_count:
+        pattern = r"(?:^|\s)" + re.escape(area.lower()) + r"$"
+        if re.search(pattern, lowered_text):
+            return area
+    return None
+
+
+def _try_contains_match(lowered_text, areas_by_word_count):
+    best_area = None
+    best_position = -1
+    for area in areas_by_word_count:
+        pattern = r"(?:^|\s)" + re.escape(area.lower()) + r"(?:\s|$)"
+        for match in re.finditer(pattern, lowered_text):
+            if match.start() > best_position:
+                best_position = match.start()
+                best_area = area
+    return best_area
+
+
+def match_single_part_against_known(single_part_values, known_areas, admin_suffixes):
     areas_by_word_count = sorted(known_areas, key=lambda a: -len(a.split()))
     matched_counter = Counter()
     unmatched = []
 
     for value in single_part_values:
-        lowered = value.lower()
-        matched = False
-        for area in areas_by_word_count:
-            pattern = r"(?:^|\s)" + re.escape(area.lower()) + r"$"
-            if re.search(pattern, lowered):
-                matched_counter[area] += 1
-                matched = True
-                break
-        if not matched:
+        noise_only = strip_noise_tokens(value)
+        area = _try_end_match(noise_only.lower(), areas_by_word_count)
+
+        if not area:
+            admin_stripped = strip_known_admin_suffix(value, admin_suffixes)
+            admin_stripped = strip_noise_tokens(admin_stripped)
+            area = _try_end_match(admin_stripped.lower(), areas_by_word_count)
+
+        if area:
+            matched_counter[area] += 1
+        else:
             unmatched.append(value)
 
     return matched_counter, unmatched
 
 
-def find_contains_fallback_match(unmatched_values, known_areas):
+def find_contains_fallback_match(unmatched_values, known_areas, admin_suffixes):
     areas_by_word_count = sorted(known_areas, key=lambda a: -len(a.split()))
     fallback_matches = {}
     still_unmatched = []
 
     for value in unmatched_values:
-        lowered = value.lower()
-        found_area = None
-        for area in areas_by_word_count:
-            pattern = r"(?:^|\s)" + re.escape(area.lower()) + r"(?:\s|$)"
-            if re.search(pattern, lowered):
-                found_area = area
-                break
-        if found_area:
-            fallback_matches[value] = found_area
+        noise_only = strip_noise_tokens(value)
+        area = _try_contains_match(noise_only.lower(), areas_by_word_count)
+
+        if not area:
+            admin_stripped = strip_known_admin_suffix(value, admin_suffixes)
+            admin_stripped = strip_noise_tokens(admin_stripped)
+            area = _try_contains_match(admin_stripped.lower(), areas_by_word_count)
+
+        if area:
+            fallback_matches[value] = area
         else:
             still_unmatched.append(value)
 
@@ -110,6 +178,7 @@ def main():
     parser.add_argument("--known-areas-out", default="data/known_areas.json")
     parser.add_argument("--review-out", default="data/location_review_needed.csv")
     parser.add_argument("--manual-overrides", default="data/manual_known_areas.json")
+    parser.add_argument("--admin-suffixes", default="data/known_admin_suffixes.json")
     parser.add_argument("--area-aliases", default="data/area_aliases.json")
     parser.add_argument("--min-frequency", type=int, default=MIN_AREA_FREQUENCY)
     args = parser.parse_args()
@@ -120,11 +189,13 @@ def main():
     manual_overrides = load_manual_overrides(Path(args.manual_overrides))
     area_aliases = load_area_aliases(Path(args.area_aliases))
 
+    admin_suffixes = load_admin_suffixes(Path(args.admin_suffixes))
+
     threshold_passed = {area for area, count in multi_part_counter.items() if count >= args.min_frequency}
     known_areas = threshold_passed | manual_overrides
 
-    matched_counter, unmatched = match_single_part_against_known(single_part_values, known_areas)
-    fallback_matches, still_unmatched = find_contains_fallback_match(unmatched, known_areas)
+    matched_counter, unmatched = match_single_part_against_known(single_part_values, known_areas, admin_suffixes)
+    fallback_matches, still_unmatched = find_contains_fallback_match(unmatched, known_areas, admin_suffixes)
 
     combined_counter = Counter()
     for area in known_areas:

@@ -23,20 +23,36 @@ Design notes:
   - Property type, area, subarea, and a bedrooms fallback are still parsed
     from the URL slug, since both sites encode these reliably there and
     it is independent of on-page text changes.
-  - Resumable: checkpoint file written after every page.
+  - Each site is crawled across multiple property categories (houses,
+    flats/apartments, self-contain, mini-flat) to avoid skewing the
+    dataset toward duplex/detached-house listings only. NPC's
+    flats-apartments category already includes studio and self-contained
+    units within the same search results, so it does not need separate
+    sub-categories. PropertyPro splits these out as distinct top-level
+    categories in its own navigation, so they are crawled separately.
+  - price_period is frequently absent from PropertyPro's own listing
+    page for the primary listing (confirmed by inspecting a live page:
+    the price renders as a bare "N18,000,000" with no period marker,
+    while unrelated listings in that same page's "Recommended
+    Properties" sidebar do show "/year"). This is a source-data gap,
+    not a parsing bug — do not "fix" this by loosening the period
+    regex, it will not help.
+  - Resumable: checkpoint file written after every page, keyed by
+    site + category + listing_type so different categories never share
+    resume state.
   - Deduplicated by listing URL, appended incrementally to CSV.
   - Rate-limited with jitter and retry/backoff on every request, including
     each individual detail-page fetch.
 
 Usage:
-    python lagos_property_scraper.py --site npc --type rent --max-pages 20
-    python lagos_property_scraper.py --site propertypro --type sale --max-pages 20
-    python lagos_property_scraper.py --site all --type all --max-pages 5
-    python lagos_property_scraper.py --site npc --type rent --inspect   # debug mode, 1 page
+    python lagos_property_scraper.py --site npc --category houses --type rent --max-pages 20
+    python lagos_property_scraper.py --site propertypro --category flat-apartment --type rent --max-pages 20
+    python lagos_property_scraper.py --site all --category all --type all --max-pages 5
+    python lagos_property_scraper.py --site npc --category houses --type rent --inspect   # debug mode, 1 page
 
 Output:
     data/raw/lagos_properties.csv  (append mode, deduped by url)
-    data/raw/.checkpoint_<site>_<type>.json  (resume state)
+    data/raw/.checkpoint_<site>_<category>_<type>.json  (resume state)
 """
 
 from __future__ import annotations
@@ -78,16 +94,40 @@ USER_AGENTS = [
 
 SITE_CONFIGS = {
     "npc": {
-        "rent": "https://nigeriapropertycentre.com/for-rent/houses/lagos/showtype",
-        "sale": "https://nigeriapropertycentre.com/for-sale/houses/lagos/showtype",
-        "detail_url_pattern": re.compile(r"/(for-rent|for-sale)/houses/.+/\d{5,}-"),
+        "categories": {
+            "houses": {
+                "rent": "https://nigeriapropertycentre.com/for-rent/houses/lagos/showtype",
+                "sale": "https://nigeriapropertycentre.com/for-sale/houses/lagos/showtype",
+            },
+            "flats-apartments": {
+                "rent": "https://nigeriapropertycentre.com/for-rent/flats-apartments/lagos/showtype",
+                "sale": "https://nigeriapropertycentre.com/for-sale/flats-apartments/lagos/showtype",
+            },
+        },
+        "detail_url_pattern": re.compile(
+            r"/(for-rent|for-sale)/(?:houses|flats-apartments)/.+/\d{5,}-"
+        ),
         "page_param": "page",
         "page_start": 1,
     },
     "propertypro": {
-        "rent": "https://propertypro.ng/property-for-rent/house/in/lagos",
-        "sale": "https://propertypro.ng/property-for-sale/house/in/lagos",
-        "detail_url_pattern": re.compile(r"/property/[a-z0-9-]+-[A-Z0-9]{5}$"),
+        "categories": {
+            "house": {
+                "rent": "https://propertypro.ng/property-for-rent/house/in/lagos",
+                "sale": "https://propertypro.ng/property-for-sale/house/in/lagos",
+            },
+            "flat-apartment": {
+                "rent": "https://propertypro.ng/property-for-rent/flat-apartment/in/lagos",
+                "sale": "https://propertypro.ng/property-for-sale/flat-apartment/in/lagos",
+            },
+            "self-contain": {
+                "rent": "https://propertypro.ng/property-for-rent/self-contain/in/lagos",
+            },
+            "mini-flat": {
+                "rent": "https://propertypro.ng/property-for-rent/mini-flat/in/lagos",
+            },
+        },
+        "detail_url_pattern": re.compile(r"/property/[a-z0-9-]+-[A-Za-z0-9]{5}$"),
         "page_param": "page",
         "page_start": 0,
     },
@@ -223,6 +263,14 @@ def _truncate_before_marker(text: str, marker: str) -> str:
     idx = text.lower().find(marker.lower())
     return text[:idx] if idx != -1 else text
 
+def _is_out_of_scope_listing(url: str) -> bool:
+    """
+    PropertyPro cross-lists shortlet units inside its regular rent search
+    results. Shortlet pricing (daily/weekly) is not comparable to annual
+    rent and must not be conflated with it downstream.
+    """
+    return "-for-shortlet-" in url
+
 
 # --------------------------------------------------------------------------
 # URL-based structured parsing
@@ -232,10 +280,10 @@ def parse_npc_url(url: str) -> dict:
     parts = [p for p in urlparse(url).path.split("/") if p]
     result = {"property_type": None, "area": None, "subarea": None,
               "bedrooms": None, "title": None}
-    if len(parts) >= 3:
-        result["property_type"] = parts[2].replace("-", " ").title()
     if "lagos" in parts:
         li = parts.index("lagos")
+        if li >= 1:
+            result["property_type"] = parts[li - 1].replace("-", " ").title()
         if len(parts) > li + 1:
             result["area"] = parts[li + 1].replace("-", " ").title()
         if len(parts) > li + 2 and not re.match(r"^\d+-", parts[li + 2]):
@@ -264,9 +312,13 @@ def parse_propertypro_url(url: str) -> dict:
     if bed_m:
         result["bedrooms"] = int(bed_m.group(1))
 
-    type_m = re.search(r"bedroom-([a-z]+)-for-(?:rent|sale)-", slug)
+    type_m = re.search(r"bedroom-([a-z]+(?:-[a-z]+)*)-for-(?:rent|sale)-", slug)
     if type_m:
         result["property_type"] = type_m.group(1).title()
+    elif re.search(r"^self-contain-for-(?:rent|sale)-", slug):
+        result["property_type"] = "Self Contain"
+    elif re.search(r"^mini-flat-for-(?:rent|sale)-", slug):
+        result["property_type"] = "Mini Flat"
 
     loc_m = re.search(r"for-(?:rent|sale)-(.+)-lagos-[A-Za-z0-9]+$", slug, re.IGNORECASE)
     if loc_m:
@@ -354,6 +406,10 @@ def discover_listing_urls(soup: BeautifulSoup, base_url: str, url_pattern: re.Pa
 
 
 def _detect_near_duplicates(listings: list[Listing]):
+    """
+    Same-page early warning only. This does not replace load_data.py's
+    dedup pass, which compares across the full dataset and across runs.
+    """
     seen = {}
     for l in listings:
         key = (l.bedrooms, l.location, l.price_ngn, l.property_type)
@@ -368,19 +424,19 @@ def _detect_near_duplicates(listings: list[Listing]):
 # Checkpointing + CSV persistence
 # --------------------------------------------------------------------------
 
-def checkpoint_path(site: str, listing_type: str) -> Path:
-    return CHECKPOINT_DIR / f".checkpoint_{site}_{listing_type}.json"
+def checkpoint_path(site: str, category: str, listing_type: str) -> Path:
+    return CHECKPOINT_DIR / f".checkpoint_{site}_{category}_{listing_type}.json"
 
 
-def load_checkpoint(site: str, listing_type: str) -> dict:
-    p = checkpoint_path(site, listing_type)
+def load_checkpoint(site: str, category: str, listing_type: str) -> dict:
+    p = checkpoint_path(site, category, listing_type)
     if p.exists():
         return json.loads(p.read_text())
     return {"last_page": None, "seen_urls": []}
 
 
-def save_checkpoint(site: str, listing_type: str, last_page: int, seen_urls: set[str]):
-    p = checkpoint_path(site, listing_type)
+def save_checkpoint(site: str, category: str, listing_type: str, last_page: int, seen_urls: set[str]):
+    p = checkpoint_path(site, category, listing_type)
     p.write_text(json.dumps({"last_page": last_page, "seen_urls": list(seen_urls)}))
 
 
@@ -410,9 +466,19 @@ def build_page_url(base_url: str, page_param: str, page_num: int, page_start: in
 # Main crawl loop
 # --------------------------------------------------------------------------
 
-def crawl(site: str, listing_type: str, max_pages: int, inspect: bool = False):
+def crawl(site: str, category: str, listing_type: str, max_pages: int, inspect: bool = False):
     config = SITE_CONFIGS[site]
-    base_url = config[listing_type]
+    category_urls = config["categories"].get(category)
+    if category_urls is None:
+        log.warning(f"[{site}] Unknown category '{category}', skipping.")
+        return
+
+    base_url = category_urls.get(listing_type)
+    if base_url is None:
+        log.info(f"[{site}/{category}/{listing_type}] Category does not support this "
+                  f"listing type, skipping.")
+        return
+
     url_pattern = config["detail_url_pattern"]
     page_param = config["page_param"]
     page_start = config["page_start"]
@@ -420,12 +486,12 @@ def crawl(site: str, listing_type: str, max_pages: int, inspect: bool = False):
     detail_parser = DETAIL_PARSERS[site]
 
     fetcher = Fetcher()
-    ckpt = load_checkpoint(site, listing_type)
+    ckpt = load_checkpoint(site, category, listing_type)
     seen_urls = set(ckpt["seen_urls"])
     start_page = (ckpt["last_page"] + 1) if ckpt["last_page"] is not None else page_start
 
     if start_page > page_start:
-        log.info(f"[{site}/{listing_type}] Resuming from page {start_page} "
+        log.info(f"[{site}/{category}/{listing_type}] Resuming from page {start_page} "
                  f"({len(seen_urls)} listings already collected)")
 
     pages_to_run = 1 if inspect else max_pages
@@ -435,21 +501,29 @@ def crawl(site: str, listing_type: str, max_pages: int, inspect: bool = False):
     for offset in range(pages_to_run):
         page_num = start_page + offset
         page_url = build_page_url(base_url, page_param, page_num, page_start)
-        log.info(f"[{site}/{listing_type}] Fetching page {page_num}: {page_url}")
+        log.info(f"[{site}/{category}/{listing_type}] Fetching page {page_num}: {page_url}")
 
         soup = fetcher.get(page_url)
         if soup is None:
-            log.warning(f"[{site}/{listing_type}] Skipping page {page_num} (fetch failed)")
+            log.warning(f"[{site}/{category}/{listing_type}] Skipping page {page_num} (fetch failed)")
             fetcher.polite_sleep()
             continue
 
         candidate_urls = discover_listing_urls(soup, page_url, url_pattern)
         if not candidate_urls:
-            log.warning(f"[{site}/{listing_type}] No listing links found on page {page_num} — "
-                        f"likely reached the end, or a structural change on the site.")
+            log.warning(f"[{site}/{category}/{listing_type}] No listing links found on page "
+                        f"{page_num} — likely reached the end, or a structural change on the site.")
             break
 
         new_urls = [u for u in candidate_urls if u not in seen_urls]
+
+        shortlet_urls = {u for u in new_urls if _is_out_of_scope_listing(u)}
+        if shortlet_urls:
+            log.info(f"[{site}/{category}/{listing_type}] Skipping {len(shortlet_urls)} "
+                      f"shortlet listing(s) — out of scope (short-term rental, not annual rent).")
+            seen_urls.update(shortlet_urls)
+        new_urls = [u for u in new_urls if u not in shortlet_urls]
+
         page_listings = []
 
         for listing_url in new_urls:
@@ -503,16 +577,16 @@ def crawl(site: str, listing_type: str, max_pages: int, inspect: bool = False):
             _detect_near_duplicates(page_listings)
             append_to_csv(page_listings)
             total_new += len(page_listings)
-            log.info(f"[{site}/{listing_type}] Page {page_num}: "
+            log.info(f"[{site}/{category}/{listing_type}] Page {page_num}: "
                      f"{len(page_listings)} new listings (total this run: {total_new})")
         else:
-            log.info(f"[{site}/{listing_type}] Page {page_num}: no new listings "
+            log.info(f"[{site}/{category}/{listing_type}] Page {page_num}: no new listings "
                      f"(all {len(candidate_urls)} already seen — possible end of results)")
 
-        save_checkpoint(site, listing_type, page_num, seen_urls)
+        save_checkpoint(site, category, listing_type, page_num, seen_urls)
         fetcher.polite_sleep()
 
-    log.info(f"[{site}/{listing_type}] Done. {total_new} new listings this run, "
+    log.info(f"[{site}/{category}/{listing_type}] Done. {total_new} new listings this run, "
              f"{len(seen_urls)} total collected so far.")
 
 
@@ -523,9 +597,13 @@ def crawl(site: str, listing_type: str, max_pages: int, inspect: bool = False):
 def main():
     parser = argparse.ArgumentParser(description="Scrape Lagos house listings (rent/sale).")
     parser.add_argument("--site", choices=["npc", "propertypro", "all"], default="all")
+    parser.add_argument("--category", default="all",
+                        help="Category to crawl (e.g. houses, flats-apartments, house, "
+                             "flat-apartment, self-contain, mini-flat). 'all' crawls every "
+                             "category defined for the selected site(s).")
     parser.add_argument("--type", choices=["rent", "sale", "all"], default="all")
     parser.add_argument("--max-pages", type=int, default=10,
-                        help="Pages to crawl per site/type this run (resumable — run again to continue).")
+                        help="Pages to crawl per site/category/type this run (resumable — run again to continue).")
     parser.add_argument("--inspect", action="store_true",
                         help="Fetch 1 page, print up to 5 sample extracted listings, exit. Use this first.")
     args = parser.parse_args()
@@ -534,8 +612,19 @@ def main():
     types = ["rent", "sale"] if args.type == "all" else [args.type]
 
     for site in sites:
-        for listing_type in types:
-            crawl(site, listing_type, args.max_pages, inspect=args.inspect)
+        site_categories = list(SITE_CONFIGS[site]["categories"].keys())
+        if args.category == "all":
+            categories = site_categories
+        elif args.category in site_categories:
+            categories = [args.category]
+        else:
+            log.warning(f"[{site}] Category '{args.category}' is not defined for this site "
+                        f"(available: {site_categories}), skipping.")
+            continue
+
+        for category in categories:
+            for listing_type in types:
+                crawl(site, category, listing_type, args.max_pages, inspect=args.inspect)
 
 
 if __name__ == "__main__":

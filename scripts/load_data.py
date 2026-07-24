@@ -97,18 +97,15 @@ def flag_dedup_groups(df):
                 if price_diff_pct > DEDUP_PRICE_TOLERANCE_PCT:
                     continue
 
-                if pd.isna(subarea_a) or pd.isna(subarea_b):
-                    df.loc[idx_b, "dedup_review_flag"] = True
-                    df.loc[idx_a, "dedup_review_flag"] = True
-                    continue
-
                 title_a = df.loc[idx_a, "title"] or ""
                 title_b = df.loc[idx_b, "title"] or ""
                 title_similarity = fuzz.token_sort_ratio(title_a, title_b)
-                subarea_similarity = fuzz.ratio(subarea_a, subarea_b)
 
-                if subarea_similarity < DEDUP_SUBAREA_SIMILARITY_THRESHOLD:
-                    continue
+                subarea_missing = pd.isna(subarea_a) or pd.isna(subarea_b)
+                if not subarea_missing:
+                    subarea_similarity = fuzz.ratio(subarea_a, subarea_b)
+                    if subarea_similarity < DEDUP_SUBAREA_SIMILARITY_THRESHOLD:
+                        continue
 
                 if title_similarity >= DEDUP_HIGH_CONFIDENCE_TITLE_THRESHOLD:
                     df.loc[idx_b, "is_duplicate_of_row"] = idx_a
