@@ -11,3 +11,13 @@ data/known_areas.json
 data/location_review_needed.csv
 scripts/check_dedup.py
 scripts/location_normalizer.py
+data/known_admin_suffixes.json
+data/manual_known_areas.json
+data/raw/.checkpoint_npc_flats-apartments_sale.json
+data/raw/.checkpoint_npc_flats-apartments_rent.json
+data/raw/.checkpoint_npc_houses_rent.json
+data/raw/.checkpoint_npc_houses_sale.json
+data/raw/.checkpoint_propertypro_flat-apartment_rent.json
+data/raw/.checkpoint_propertypro_flat-apartment_sale.json
+data/raw/.checkpoint_propertypro_house_rent.json
+data/raw/.checkpoint_propertypro_house_sale.json
