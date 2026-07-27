@@ -7,9 +7,11 @@ from numpy.ma import anomalies
 import pandas as pd
 from dotenv import load_dotenv
 from rapidfuzz import fuzz
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy import Table, MetaData
+
+from db import get_engine
 
 from location_normalizer import normalize_location
 
@@ -24,17 +26,6 @@ DEDUP_HIGH_CONFIDENCE_TITLE_THRESHOLD = 80
 RENT_MONTHLY_SANITY_CEILING_NGN = 10_000_000
 GENERIC_PROPERTY_TYPE_VALUES = {"lagos"}
 RENT_ANNUAL_SANITY_FLOOR_NGN = 300_000
-
-
-def get_engine():
-    load_dotenv()
-    user = os.getenv("POSTGRES_USER", "lagos_rent")
-    password = os.getenv("POSTGRES_PASSWORD", "lagos_rent")
-    db = os.getenv("POSTGRES_DB", "lagos_rent")
-    host = os.getenv("POSTGRES_HOST", "localhost")
-    port = os.getenv("POSTGRES_PORT", "5432")
-    url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}"
-    return create_engine(url)
 
 
 def apply_schema(engine, schema_path):
