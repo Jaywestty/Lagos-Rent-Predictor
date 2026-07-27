@@ -4,3 +4,9 @@ scikit-learn>=1.2
 xgboost
 streamlit
 joblib
+fastapi
+uvicorn[standard]
+groq
+typer
+loguru
+pydantic
