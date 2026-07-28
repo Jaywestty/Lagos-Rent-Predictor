@@ -4,10 +4,10 @@ from pydantic import BaseModel
 
 from typing import Optional
 
-from entities import EntityExtractionError, QueryType, extract_entities
-from query_engine import run_lookup, run_affordability, run_comparison
-from response import build_lookup_response, build_affordability_response, build_comparison_response
-from session import load_session_entities, save_session_entities
+from query.entities import EntityExtractionError, QueryType, extract_entities
+from query.query_engine import run_lookup, run_affordability, run_comparison
+from query.response import build_lookup_response, build_affordability_response, build_comparison_response
+from conversation.session import load_session_entities, save_session_entities
 
 logger.add("logs/app.log", rotation="10 MB", retention="14 days", level="INFO")
 

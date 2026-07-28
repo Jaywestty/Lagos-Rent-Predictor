@@ -6,7 +6,7 @@ from loguru import logger
 from sqlalchemy import text
 
 from db import get_engine
-from entities import PropertyEntities
+from query.entities import PropertyEntities
 
 SESSION_TTL_HOURS = 6
 

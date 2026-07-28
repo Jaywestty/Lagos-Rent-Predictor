@@ -1,7 +1,7 @@
 from typing import Optional
 
-from entities import PropertyEntities
-from query_engine import SPARSE_AREA_THRESHOLD
+from query.entities import PropertyEntities
+from query.query_engine import SPARSE_AREA_THRESHOLD
 
 
 def format_price(price_ngn: Optional[float], price_period: Optional[str]) -> str:

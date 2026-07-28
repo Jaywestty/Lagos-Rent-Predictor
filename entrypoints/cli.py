@@ -4,10 +4,10 @@ from loguru import logger
 import uuid
 from typing import Optional
 
-from entities import EntityExtractionError, PropertyEntities, QueryType, extract_entities
-from query_engine import run_lookup, run_affordability, run_comparison
-from response import build_lookup_response, build_affordability_response, build_comparison_response
-from session import load_session_entities, save_session_entities
+from query.entities import EntityExtractionError, PropertyEntities, QueryType, extract_entities
+from query.query_engine import run_lookup, run_affordability, run_comparison
+from query.response import build_lookup_response, build_affordability_response, build_comparison_response
+from conversation.session import load_session_entities, save_session_entities
 
 logger.add("logs/cli.log", rotation="10 MB", retention="14 days", level="INFO")
 
@@ -98,7 +98,7 @@ def chat(session_id: Optional[str] = None):
 @app.command()
 def serve(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):
     import uvicorn
-    uvicorn.run("main:app", host=host, port=port, reload=reload)
+    uvicorn.run("entrypoints.api:app", host=host, port=port, reload=reload)
 
 
 if __name__ == "__main__":

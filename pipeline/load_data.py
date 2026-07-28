@@ -13,7 +13,7 @@ from sqlalchemy import Table, MetaData
 
 from db import get_engine
 
-from location_normalizer import normalize_location
+from scraping.location_normalizer import normalize_location
 
 DEDUP_SUBAREA_SIMILARITY_THRESHOLD = 85
 DEDUP_PRICE_TOLERANCE_PCT = 0.05

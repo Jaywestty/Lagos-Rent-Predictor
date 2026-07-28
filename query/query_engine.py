@@ -4,8 +4,8 @@ from loguru import logger
 from sqlalchemy import text
 
 from db import get_engine
-from entities import PropertyEntities, QueryType
-from location_normalizer import normalize_location
+from query.entities import PropertyEntities, QueryType
+from scraping.location_normalizer import normalize_location
 
 LOOKUP_RESULT_LIMIT = 10
 AFFORDABILITY_RESULT_LIMIT = 30
