@@ -3,8 +3,8 @@ from loguru import logger
 from pydantic import BaseModel
 
 from entities import EntityExtractionError, QueryType, extract_entities
-from query_engine import run_lookup
-from response import build_lookup_response
+from query_engine import run_lookup, run_affordability, run_comparison
+from response import build_lookup_response, build_affordability_response, build_comparison_response
 
 logger.add("logs/app.log", rotation="10 MB", retention="14 days", level="INFO")
 
@@ -23,20 +23,19 @@ def query_listings(request: QueryRequest):
         logger.error("Entity extraction failed for query='{}': {}", request.query, exc)
         raise HTTPException(status_code=422, detail="Could not understand the query.") from exc
 
-    if entities.query_type != QueryType.LOOKUP:
-        raise HTTPException(
-            status_code=501,
-            detail=f"Query type '{entities.query_type.value}' is not yet supported.",
-        )
-
     try:
-        listings = run_lookup(entities)
+        if entities.query_type == QueryType.LOOKUP:
+            listings = run_lookup(entities)
+            return build_lookup_response(entities, listings)
+        if entities.query_type == QueryType.AFFORDABILITY:
+            result = run_affordability(entities)
+            return build_affordability_response(entities, result)
+        if entities.query_type == QueryType.COMPARISON:
+            result = run_comparison(entities)
+            return build_comparison_response(entities, result)
     except Exception as exc:
-        logger.error("Lookup query failed for query='{}': {}", request.query, exc)
+        logger.error("Query failed for query='{}': {}", request.query, exc)
         raise HTTPException(status_code=500, detail="Search failed. Try again.") from exc
-
-    return build_lookup_response(entities, listings)
-
 
 @app.get("/health")
 def health():
