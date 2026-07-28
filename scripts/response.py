@@ -45,6 +45,16 @@ def build_affordability_response(entities: PropertyEntities, result: dict) -> di
     stretch = result["stretch"]
     total_matches = result["total_matches"]
 
+    if entities.budget_ngn is None:
+        return {
+            "query_type": entities.query_type.value,
+            "budget_ngn": None,
+            "matched_count": 0,
+            "message": "I'd need a budget figure to check affordability — how much are you working with?",
+            "areas": [],
+            "stretch_options": [],
+        }
+
     if not within_budget and not stretch:
         return {
             "query_type": entities.query_type.value,

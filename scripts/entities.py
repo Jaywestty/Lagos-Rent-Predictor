@@ -21,6 +21,13 @@ GENERIC_PROPERTY_TYPE_TERMS = {
 
 SYSTEM_PROMPT = """You extract structured search intent from natural language queries about renting or buying property in Lagos, Nigeria.
 
+You may be given the entities extracted from the user's PREVIOUS query in this conversation, as
+context. If provided, treat the new query as a possible follow-up: any field the new query does
+NOT mention should carry over unchanged from the previous entities. Only override a field when
+the new query explicitly states something different for it. If the new query changes the topic
+entirely (a clearly unrelated request), ignore the previous context and extract fresh from
+scratch. If no previous context is provided, extract fresh from scratch as normal.
+
 Return ONLY a JSON object with these fields, no other text, no markdown fences:
 - query_type: one of "lookup", "affordability", "comparison"
   - "lookup" = user wants listings matching specific criteria (beds, area)
@@ -114,9 +121,23 @@ def _get_client() -> Groq:
         raise EntityExtractionError("GROQ_API_KEY is not set")
     return Groq(api_key=api_key)
 
+def _build_follow_up_context(previous: Optional["PropertyEntities"]) -> Optional[str]:
+    if previous is None:
+        return None
+    return (
+        "Previous turn's extracted entities, for follow-up merging:\n"
+        f"{json.dumps(previous.model_dump(mode='json'))}"
+    )
 
-def _call_groq(client: Groq, user_query: str, retry_hint: Optional[str] = None) -> str:
+def _call_groq(
+    client: Groq,
+    user_query: str,
+    retry_hint: Optional[str] = None,
+    follow_up_context: Optional[str] = None,
+) -> str:
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    if follow_up_context:
+        messages.append({"role": "system", "content": follow_up_context})
     if retry_hint:
         messages.append({"role": "system", "content": retry_hint})
     messages.append({"role": "user", "content": user_query})
@@ -129,18 +150,21 @@ def _call_groq(client: Groq, user_query: str, retry_hint: Optional[str] = None) 
     )
     return response.choices[0].message.content
 
-
-def extract_entities(user_query: str) -> PropertyEntities:
+def extract_entities(
+    user_query: str,
+    previous_entities: Optional[PropertyEntities] = None,
+) -> PropertyEntities:
     if not user_query or not user_query.strip():
         raise EntityExtractionError("query text is empty")
 
     client = _get_client()
+    follow_up_context = _build_follow_up_context(previous_entities)
     retry_hint = None
     last_error: Optional[Exception] = None
 
     for attempt in range(1, MAX_EXTRACTION_ATTEMPTS + 1):
         try:
-            raw = _call_groq(client, user_query, retry_hint)
+            raw = _call_groq(client, user_query, retry_hint, follow_up_context)
             data = json.loads(raw)
             entities = PropertyEntities.model_validate(data)
             entities = _sanitize_property_type(entities)

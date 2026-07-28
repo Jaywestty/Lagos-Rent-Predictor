@@ -32,3 +32,11 @@ CREATE TABLE IF NOT EXISTS location_aliases (
 CREATE INDEX IF NOT EXISTS idx_listings_area_beds ON listings (area, bedrooms, listing_type);
 CREATE INDEX IF NOT EXISTS idx_listings_price ON listings (price_ngn);
 CREATE INDEX IF NOT EXISTS idx_listings_url ON listings (url);
+
+CREATE TABLE IF NOT EXISTS conversation_sessions (
+    session_id TEXT PRIMARY KEY,
+    last_entities JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_sessions_updated_at ON conversation_sessions (updated_at);
