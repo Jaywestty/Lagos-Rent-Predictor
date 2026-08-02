@@ -1,0 +1,148 @@
+[
+  {
+    "query": "I wan rent 2 bedroom flat for Yaba",
+    "expected": {"query_type": "lookup", "beds": 2, "area": "Yaba", "property_type": "flat", "listing_type": "rent"}
+  },
+  {
+    "query": "Abeg I need a self contain around Oshodi, how much e go cost",
+    "expected": {"query_type": "lookup", "beds": null, "area": "Oshodi", "property_type": "self contain", "listing_type": "rent"}
+  },
+  {
+    "query": "3 bedroom duplex for sale in Ikeja GRA",
+    "expected": {"query_type": "lookup", "beds": 3, "area": "Ikeja GRA", "property_type": "duplex", "listing_type": "sale"}
+  },
+  {
+    "query": "Mini flat for rent, Surulere",
+    "expected": {"query_type": "lookup", "beds": null, "area": "Surulere", "property_type": "mini flat", "listing_type": "rent"}
+  },
+  {
+    "query": "I need a 4 bedroom terrace in Lekki Phase 1",
+    "expected": {"query_type": "lookup", "beds": 4, "area": "Lekki Phase 1", "property_type": "terrace", "listing_type": null}
+  },
+  {
+    "query": "Show me houses to buy in Ajah",
+    "expected": {"query_type": "lookup", "beds": null, "area": "Ajah", "property_type": null, "listing_type": "sale"}
+  },
+  {
+    "query": "I get 500k, wetin I fit rent for Lagos?",
+    "expected": {"query_type": "affordability", "budget_ngn": 500000, "area": null, "property_type": null, "listing_type": "rent"}
+  },
+  {
+    "query": "My budget na 1.2 million per year, where can I get 2 bedroom",
+    "expected": {"query_type": "affordability", "beds": 2, "budget_ngn": 1200000, "budget_period": "year", "budget_period_was_explicit": true}
+  },
+  {
+    "query": "I fit spend 200k monthly, any decent place for Yaba?",
+    "expected": {"query_type": "affordability", "budget_ngn": 200000, "budget_period": "month", "budget_period_was_explicit": true, "area": "Yaba"}
+  },
+  {
+    "query": "With 3 million naira, what apartment can I afford in Lekki",
+    "expected": {"query_type": "affordability", "budget_ngn": 3000000, "area": "Lekki", "property_type": null}
+  },
+  {
+    "query": "How much house I fit get with 800k for Ikorodu",
+    "expected": {"query_type": "affordability", "budget_ngn": 800000, "area": "Ikorodu"}
+  },
+  {
+    "query": "I have 350k, should I get a 2 bedroom in Ikeja or a single room in Yaba?",
+    "expected": {
+      "query_type": "comparison",
+      "budget_ngn": 350000,
+      "comparison_options": [
+        {"beds": 2, "area": "Ikeja"},
+        {"beds": null, "area": "Yaba", "property_type": "self contain"}
+      ]
+    }
+  },
+  {
+    "query": "Should I rent for Surulere or buy for Ikorodu with 5 million?",
+    "expected": {
+      "query_type": "comparison",
+      "budget_ngn": 5000000,
+      "comparison_options": [
+        {"area": "Surulere", "listing_type": "rent"},
+        {"area": "Ikorodu", "listing_type": "sale"}
+      ]
+    }
+  },
+  {
+    "query": "2 bedroom mainland or single room island, which one better for 350k",
+    "expected": {
+      "query_type": "comparison",
+      "budget_ngn": 350000,
+      "comparison_options": [
+        {"beds": 2, "area": null},
+        {"beds": null, "area": null, "property_type": "self contain"}
+      ]
+    }
+  },
+  {
+    "query": "Compare 3 bedroom for Ajah versus 3 bedroom for Ikeja",
+    "expected": {
+      "query_type": "comparison",
+      "comparison_options": [
+        {"beds": 3, "area": "Ajah"},
+        {"beds": 3, "area": "Ikeja"}
+      ]
+    }
+  },
+  {
+    "query": "Na wetin be normal agent fee for Lagos?",
+    "expected": {"query_type": "advice"}
+  },
+  {
+    "query": "How much caution fee dem dey charge before I move in?",
+    "expected": {"query_type": "advice"}
+  },
+  {
+    "query": "Wetin I go check before I sign lease for Lagos?",
+    "expected": {"query_type": "advice"}
+  },
+  {
+    "query": "Is 2 years rent upfront normal for Lagos landlords?",
+    "expected": {"query_type": "advice"}
+  },
+  {
+    "query": "How I go know say agent na scam before I pay am?",
+    "expected": {"query_type": "advice"}
+  },
+  {
+    "query": "Wetin be the difference between caution fee and agency fee?",
+    "expected": {"query_type": "advice"}
+  },
+  {
+    "query": "Which one dey better, Lekki or Ajah for electricity light?",
+    "expected": {"query_type": "advice"}
+  },
+  {
+    "query": "asdkjaslkdj",
+    "expected": {"query_type": "lookup", "beds": null, "area": null, "property_type": null, "listing_type": null}
+  },
+  {
+    "query": "2 bedroom apartment for Ikeja",
+    "expected": {"query_type": "lookup", "beds": 2, "area": "Ikeja", "property_type": null, "listing_type": null}
+  },
+  {
+    "query": "I need house make e get parking space, 3 bedroom, Magodo",
+    "expected": {"query_type": "lookup", "beds": 3, "area": "Magodo"}
+  },
+  {
+    "query": "Wetin be typical inspection process before signing agreement?",
+    "expected": {"query_type": "advice"}
+  },
+  {
+    "query": "I get 900k, na Ipaja or Badagry go best make sense",
+    "expected": {
+      "query_type": "comparison",
+      "budget_ngn": 900000,
+      "comparison_options": [
+        {"area": "Ipaja"},
+        {"area": "Badagry"}
+      ]
+    }
+  },
+  {
+    "query": "House hunting don tire me, na landlord property or estate agent I go find for Yaba",
+    "expected": {"query_type": "advice"}
+  }
+]
