@@ -33,6 +33,10 @@ Return ONLY a JSON object with these fields, no other text, no markdown fences:
   - "lookup" = user wants listings matching specific criteria (beds, area)
   - "affordability" = user gives a budget and wants to know what they can get, optionally where
   - "comparison" = user wants two or more specific options compared against each other
+  - "advice" = user is asking a general question about renting/buying in Lagos that isn't about
+    specific listings — rent negotiation, agent fees, deposits, tenancy law/practices, road
+    conditions, proximity concerns, electricity reliability, red flags to watch for, or similar.
+    This does not need beds/area/budget/property_type/listing_type to be set at all.
 - beds: integer number of bedrooms, or null if not stated (not used when query_type is "comparison")
 - area: the Lagos area/neighborhood name as stated by the user, or null if not stated (not used when query_type is "comparison")
 - budget_ngn: the budget in Nigerian Naira as a number, or null if not stated
@@ -52,10 +56,6 @@ Return ONLY a JSON object with these fields, no other text, no markdown fences:
   Note: the database has no "mainland" or "island" column. If the user names a region rather than
   a specific area (e.g. "the mainland", "the island"), leave area null for that option and only
   extract beds/property_type/listing_type. Do not guess a specific area for a region-level term.
-- "advice" = user is asking a general question about renting/buying in Lagos that isn't about
-    specific listings — rent negotiation, agent fees, deposits, tenancy law/practices, road
-    conditions, proximity concerns, electricity reliability, red flags to watch for, or similar.
-    This does not need beds/area/budget/property_type/listing_type to be set at all.
 - resolved_query: REQUIRED when query_type is "advice", otherwise null. A fully self-contained
   rewrite of the user's question, suitable for a web search on its own with no other context.
   If this question is a follow-up to a PREVIOUS advice question (previous context will be given
@@ -75,6 +75,10 @@ Example 2b - affordability with generic word:
 Query: "I have 800k, what house can I get in Surulere?"
 Output: {"query_type": "affordability", "beds": null, "area": "Surulere", "budget_ngn": 800000, "budget_period": "year", "budget_period_was_explicit": false, "property_type": null, "listing_type": null, "comparison_options": null, "resolved_query": null}
 
+Example 2c - affordability with explicit monthly budget:
+Query: "I fit spend 200k monthly, any decent place for Yaba?"
+Output: {"query_type": "affordability", "beds": null, "area": "Yaba", "budget_ngn": 200000, "budget_period": "month", "budget_period_was_explicit": true, "property_type": null, "listing_type": null, "comparison_options": null, "resolved_query": null}
+
 Example 3 - comparison:
 Query: "I have 350k, should I get a 2 bedroom on the mainland or a single room on the island?"
 Output: {"query_type": "comparison", "beds": null, "area": null, "budget_ngn": 350000, "budget_period": "year", "budget_period_was_explicit": false, "property_type": null, "listing_type": null, "comparison_options": [{"label": "2 bedroom on the mainland", "beds": 2, "area": null, "property_type": null, "listing_type": null}, {"label": "single room on the island", "beds": null, "area": null, "property_type": "self contain", "listing_type": null}]}
@@ -87,6 +91,18 @@ Example 5 - advice follow-up:
 Previous context: {"query_type": "advice", "resolved_query": "How much security deposit is normal for renting an apartment in Lagos, Nigeria?", ...}
 Query: "what about for a shared apartment"
 Output: {"query_type": "advice", "beds": null, "area": null, "budget_ngn": null, "budget_period": "year", "budget_period_was_explicit": false, "property_type": null, "listing_type": null, "comparison_options": null, "resolved_query": "How much security deposit is normal for renting a shared/roommate apartment in Lagos, Nigeria, compared to renting alone?"}
+
+Additional disambiguation rules:
+- If the query is gibberish, empty of any real content, or you cannot confidently identify what
+  the user wants, default to query_type "lookup" with all other fields null, rather than guessing
+  "advice". A lookup with no filters fails safely with no results; an incorrect "advice"
+  classification wastes a real web search on meaningless input.
+- If the user names two or more specific areas/options as alternatives (e.g. "X or Y", "X versus
+  Y"), treat this as query_type "comparison" even without the words "compare" or "vs" appearing
+  explicitly.
+- Phrases like "single room", "room", or "self contain" (without an explicit bedroom count) map to
+  property_type "self contain", NOT beds=1. Only set beds when the user states an explicit number
+  of bedrooms.
 """
 class QueryType(str, Enum):
     LOOKUP = "lookup"
