@@ -8,12 +8,13 @@ from query.entities import EntityExtractionError, PropertyEntities, QueryType, e
 from query.query_engine import run_lookup, run_affordability, run_comparison
 from query.response import build_lookup_response, build_affordability_response, build_comparison_response
 from conversation.session import load_session_entities, save_session_entities
+from advice.advice_engine import answer_advice_query
 
 logger.add("logs/cli.log", rotation="10 MB", retention="14 days", level="INFO")
 
 app = typer.Typer()
 
-def _run_and_print(entities: PropertyEntities) -> None:
+def _run_and_print(entities: PropertyEntities, raw_query: str) -> None:
     if entities.query_type == QueryType.LOOKUP:
         listings = run_lookup(entities)
         result = build_lookup_response(entities, listings)
@@ -47,6 +48,14 @@ def _run_and_print(entities: PropertyEntities) -> None:
                 typer.echo(f"  [note: {option['caveat']}]")
             for item in option["results"]:
                 typer.echo(f"  - {item['title']} | {item['price']} | {item['area']} | {item['url']}")
+    
+    elif entities.query_type == QueryType.ADVICE:
+        result = answer_advice_query(entities.resolved_query or raw_query)
+        typer.echo(result["answer"])
+        if result["sources"]:
+            typer.echo("\nSources:")
+            for source in result["sources"]:
+                typer.echo(f"  - {source['title']} | {source['url']}")
 
 
 @app.command()
@@ -59,7 +68,7 @@ def query(text: str):
         raise typer.Exit(code=1)
 
     try:
-        _run_and_print(entities)
+        _run_and_print(entities, text)
     except Exception as exc:
         logger.error("Query failed: {}", exc)
         typer.echo("Search failed. Try again.")
@@ -87,7 +96,7 @@ def chat(session_id: Optional[str] = None):
             continue
 
         try:
-            _run_and_print(entities)
+            _run_and_print(entities, text)
         except Exception as exc:
             logger.error("Query failed: {}", exc)
             typer.echo("Search failed. Try again.")
