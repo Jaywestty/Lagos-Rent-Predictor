@@ -22,3 +22,4 @@ data/raw/.checkpoint_propertypro_house_sale.json
 __pycache__/
 *.pyc
 logs/
+eval/reports/
