@@ -29,7 +29,7 @@ entirely (a clearly unrelated request), ignore the previous context and extract 
 scratch. If no previous context is provided, extract fresh from scratch as normal.
 
 Return ONLY a JSON object with these fields, no other text, no markdown fences:
-- query_type: one of "lookup", "affordability", "comparison"
+- query_type: one of "lookup", "affordability", "comparison", "advice"
   - "lookup" = user wants listings matching specific criteria (beds, area)
   - "affordability" = user gives a budget and wants to know what they can get, optionally where
   - "comparison" = user wants two or more specific options compared against each other
@@ -52,27 +52,47 @@ Return ONLY a JSON object with these fields, no other text, no markdown fences:
   Note: the database has no "mainland" or "island" column. If the user names a region rather than
   a specific area (e.g. "the mainland", "the island"), leave area null for that option and only
   extract beds/property_type/listing_type. Do not guess a specific area for a region-level term.
-
+- "advice" = user is asking a general question about renting/buying in Lagos that isn't about
+    specific listings — rent negotiation, agent fees, deposits, tenancy law/practices, road
+    conditions, proximity concerns, electricity reliability, red flags to watch for, or similar.
+    This does not need beds/area/budget/property_type/listing_type to be set at all.
+- resolved_query: REQUIRED when query_type is "advice", otherwise null. A fully self-contained
+  rewrite of the user's question, suitable for a web search on its own with no other context.
+  If this question is a follow-up to a PREVIOUS advice question (previous context will be given
+  to you when applicable), incorporate the prior topic into the rewrite so it stands alone — do
+  NOT just repeat the raw follow-up text verbatim. Always mention Lagos/Nigeria explicitly in the
+  rewrite if the topic is location-relevant, since the raw follow-up often omits it.
+  
 Example 1 - lookup:
 Query: "I want to rent a 2 bedroom in Oshodi"
-Output: {"query_type": "lookup", "beds": 2, "area": "Oshodi", "budget_ngn": null, "budget_period": "year", "budget_period_was_explicit": false, "property_type": null, "listing_type": "rent", "comparison_options": null}
+Output: {"query_type": "lookup", "beds": 2, "area": "Oshodi", "budget_ngn": null, "budget_period": "year", "budget_period_was_explicit": false, "property_type": null, "listing_type": "rent", "comparison_options": null, "resolved_query": null}
 
 Example 2 - affordability:
 Query: "I have 500k, what apartments can I afford and where in Lagos?"
-Output: {"query_type": "affordability", "beds": null, "area": null, "budget_ngn": 500000, "budget_period": "year", "budget_period_was_explicit": false, "property_type": "apartment", "listing_type": null, "comparison_options": null}
+Output: {"query_type": "affordability", "beds": null, "area": null, "budget_ngn": 500000, "budget_period": "year", "budget_period_was_explicit": false, "property_type": "apartment", "listing_type": null, "comparison_options": null, "resolved_query": null}
 
 Example 2b - affordability with generic word:
 Query: "I have 800k, what house can I get in Surulere?"
-Output: {"query_type": "affordability", "beds": null, "area": "Surulere", "budget_ngn": 800000, "budget_period": "year", "budget_period_was_explicit": false, "property_type": null, "listing_type": null, "comparison_options": null}
+Output: {"query_type": "affordability", "beds": null, "area": "Surulere", "budget_ngn": 800000, "budget_period": "year", "budget_period_was_explicit": false, "property_type": null, "listing_type": null, "comparison_options": null, "resolved_query": null}
 
 Example 3 - comparison:
 Query: "I have 350k, should I get a 2 bedroom on the mainland or a single room on the island?"
 Output: {"query_type": "comparison", "beds": null, "area": null, "budget_ngn": 350000, "budget_period": "year", "budget_period_was_explicit": false, "property_type": null, "listing_type": null, "comparison_options": [{"label": "2 bedroom on the mainland", "beds": 2, "area": null, "property_type": null, "listing_type": null}, {"label": "single room on the island", "beds": null, "area": null, "property_type": "self contain", "listing_type": null}]}
+
+Example 4 - advice:
+Query: "Is agent fee negotiable in Lagos?"
+Output: {"query_type": "advice", "beds": null, "area": null, "budget_ngn": null, "budget_period": "year", "budget_period_was_explicit": false, "property_type": null, "listing_type": null, "comparison_options": null, "resolved_query": "Is real estate agent fee negotiable when renting property in Lagos, Nigeria?"}
+
+Example 5 - advice follow-up:
+Previous context: {"query_type": "advice", "resolved_query": "How much security deposit is normal for renting an apartment in Lagos, Nigeria?", ...}
+Query: "what about for a shared apartment"
+Output: {"query_type": "advice", "beds": null, "area": null, "budget_ngn": null, "budget_period": "year", "budget_period_was_explicit": false, "property_type": null, "listing_type": null, "comparison_options": null, "resolved_query": "How much security deposit is normal for renting a shared/roommate apartment in Lagos, Nigeria, compared to renting alone?"}
 """
 class QueryType(str, Enum):
     LOOKUP = "lookup"
     AFFORDABILITY = "affordability"
     COMPARISON = "comparison"
+    ADVICE = "advice"
 
 
 class ListingType(str, Enum):
@@ -101,6 +121,7 @@ class PropertyEntities(BaseModel):
     property_type: Optional[str] = Field(default=None)
     listing_type: Optional[ListingType] = Field(default=None)
     comparison_options: Optional[list[ComparisonOption]] = Field(default=None)
+    resolved_query: Optional[str] = Field(default=None)
 
     @model_validator(mode="after")
     def _validate_comparison_options(self):
@@ -108,8 +129,9 @@ class PropertyEntities(BaseModel):
             self.comparison_options is None or len(self.comparison_options) < 2
         ):
             raise ValueError("comparison query_type requires at least 2 comparison_options")
+        if self.query_type == QueryType.ADVICE and not self.resolved_query:
+            raise ValueError("advice query_type requires resolved_query to be set")
         return self
-
 
 class EntityExtractionError(Exception):
     pass
