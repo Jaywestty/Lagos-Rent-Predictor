@@ -8,6 +8,7 @@ from query.entities import EntityExtractionError, QueryType, extract_entities
 from query.query_engine import run_lookup, run_affordability, run_comparison
 from query.response import build_lookup_response, build_affordability_response, build_comparison_response
 from conversation.session import load_session_entities, save_session_entities
+from advice.advice_engine import answer_advice_query
 
 logger.add("logs/app.log", rotation="10 MB", retention="14 days", level="INFO")
 
@@ -39,6 +40,9 @@ def query_listings(request: QueryRequest):
         elif entities.query_type == QueryType.COMPARISON:
             comp_result = run_comparison(entities)
             result = build_comparison_response(entities, comp_result)
+
+        elif entities.query_type == QueryType.ADVICE:
+            result = answer_advice_query(entities.resolved_query or request.query)
         else:
             raise HTTPException(status_code=501, detail=f"Query type '{entities.query_type.value}' is not supported.")
     except HTTPException:
