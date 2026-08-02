@@ -9,4 +9,5 @@ uvicorn[standard]
 groq
 typer
 loguru
+tavily-python
 pydantic
