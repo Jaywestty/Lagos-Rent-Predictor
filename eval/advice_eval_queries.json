@@ -1,0 +1,5 @@
+[
+  {"query": "Is agent fee negotiable in Lagos?", "ground_truth": "Agent fees in Nigeria are not regulated by law and are negotiable between agent and client."},
+  {"query": "How much deposit is normal for renting in Lagos?", "ground_truth": "A typical caution/security deposit in Lagos is around 10% of annual rent, or roughly 1-2 months' rent equivalent."},
+  {"query": "What are red flags to watch for when renting in Lagos?", "ground_truth": "Red flags include being asked for money before viewing, pressure to pay same-day, prices far below market, and landlords refusing viewings."}
+]
