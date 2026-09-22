@@ -40,3 +40,18 @@ CREATE TABLE IF NOT EXISTS conversation_sessions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_conversation_sessions_updated_at ON conversation_sessions (updated_at);
+
+CREATE TABLE IF NOT EXISTS traces (
+    id SERIAL PRIMARY KEY,
+    trace_id TEXT NOT NULL,
+    stage TEXT NOT NULL,
+    query_type TEXT,
+    duration_ms NUMERIC,
+    call_counts JSONB,
+    success BOOLEAN NOT NULL,
+    error TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_traces_trace_id ON traces (trace_id);
+CREATE INDEX IF NOT EXISTS idx_traces_created_at ON traces (created_at);

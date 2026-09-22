@@ -6,6 +6,7 @@ from sqlalchemy import text
 from db import get_engine
 from query.entities import PropertyEntities, QueryType
 from scraping.location_normalizer import normalize_location
+from observability.tracer import record_call
 
 LOOKUP_RESULT_LIMIT = 10
 AFFORDABILITY_RESULT_LIMIT = 30
@@ -101,6 +102,7 @@ def run_lookup(entities: PropertyEntities) -> list[dict]:
         return []
     stmt, params = build_lookup_query(entities)
     engine = get_engine()
+    record_call("db")
     with engine.connect() as conn:
         rows = conn.execute(stmt, params).mappings().all()
 
@@ -120,6 +122,7 @@ def run_affordability(entities: PropertyEntities) -> dict:
 
     stmt, params = build_affordability_query(entities)
     engine = get_engine()
+    record_call("db")
     with engine.connect() as conn:
         rows = [dict(row) for row in conn.execute(stmt, params).mappings().all()]
 
@@ -176,6 +179,7 @@ def run_comparison(entities: PropertyEntities) -> dict:
 
         stmt, params = build_lookup_query(sub_entities)
         params["limit"] = COMPARISON_RESULT_LIMIT
+        record_call("db")
         with engine.connect() as conn:
             rows = conn.execute(stmt, params).mappings().all()
         results[option.label] = [dict(row) for row in rows]

@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from groq import Groq
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, model_validator
+from observability.tracer import record_call
 
 load_dotenv()
 
@@ -31,7 +32,10 @@ scratch. If no previous context is provided, extract fresh from scratch as norma
 Return ONLY a JSON object with these fields, no other text, no markdown fences:
 - query_type: one of "lookup", "affordability", "comparison", "advice"
   - "lookup" = user wants listings matching specific criteria (beds, area)
-  - "affordability" = user gives a budget and wants to know what they can get, optionally where
+  - "affordability" = user gives a budget and wants to know what they can get, optionally where.
+    This is true even when phrased as "where can I get X" or "what can I get for X" — if a specific
+    budget figure is present, the presence of a budget makes this affordability, not lookup, even
+    if the sentence also mentions beds/area/property type.
   - "comparison" = user wants two or more specific options compared against each other
   - "advice" = user is asking a general question about renting/buying in Lagos that isn't about
     specific listings — rent negotiation, agent fees, deposits, tenancy law/practices, road
@@ -62,7 +66,7 @@ Return ONLY a JSON object with these fields, no other text, no markdown fences:
   to you when applicable), incorporate the prior topic into the rewrite so it stands alone — do
   NOT just repeat the raw follow-up text verbatim. Always mention Lagos/Nigeria explicitly in the
   rewrite if the topic is location-relevant, since the raw follow-up often omits it.
-  
+
 Example 1 - lookup:
 Query: "I want to rent a 2 bedroom in Oshodi"
 Output: {"query_type": "lookup", "beds": 2, "area": "Oshodi", "budget_ngn": null, "budget_period": "year", "budget_period_was_explicit": false, "property_type": null, "listing_type": "rent", "comparison_options": null, "resolved_query": null}
@@ -78,6 +82,10 @@ Output: {"query_type": "affordability", "beds": null, "area": "Surulere", "budge
 Example 2c - affordability with explicit monthly budget:
 Query: "I fit spend 200k monthly, any decent place for Yaba?"
 Output: {"query_type": "affordability", "beds": null, "area": "Yaba", "budget_ngn": 200000, "budget_period": "month", "budget_period_was_explicit": true, "property_type": null, "listing_type": null, "comparison_options": null, "resolved_query": null}
+
+Example 2d - affordability phrased as "where can I get":
+Query: "My budget na 1.2 million per year, where can I get 2 bedroom"
+Output: {"query_type": "affordability", "beds": 2, "area": null, "budget_ngn": 1200000, "budget_period": "year", "budget_period_was_explicit": true, "property_type": null, "listing_type": null, "comparison_options": null, "resolved_query": null}
 
 Example 3 - comparison:
 Query: "I have 350k, should I get a 2 bedroom on the mainland or a single room on the island?"
@@ -104,6 +112,8 @@ Additional disambiguation rules:
   property_type "self contain", NOT beds=1. Only set beds when the user states an explicit number
   of bedrooms.
 """
+
+
 class QueryType(str, Enum):
     LOOKUP = "lookup"
     AFFORDABILITY = "affordability"
@@ -115,12 +125,14 @@ class ListingType(str, Enum):
     RENT = "rent"
     SALE = "sale"
 
+
 class ComparisonOption(BaseModel):
     label: str
     beds: Optional[int] = Field(default=None, ge=0)
     area: Optional[str] = Field(default=None)
     property_type: Optional[str] = Field(default=None)
     listing_type: Optional[ListingType] = Field(default=None)
+
 
 class BudgetPeriod(str, Enum):
     YEAR = "year"
@@ -149,6 +161,7 @@ class PropertyEntities(BaseModel):
             raise ValueError("advice query_type requires resolved_query to be set")
         return self
 
+
 class EntityExtractionError(Exception):
     pass
 
@@ -159,6 +172,7 @@ def _get_client() -> Groq:
         raise EntityExtractionError("GROQ_API_KEY is not set")
     return Groq(api_key=api_key)
 
+
 def _build_follow_up_context(previous: Optional["PropertyEntities"]) -> Optional[str]:
     if previous is None:
         return None
@@ -166,6 +180,7 @@ def _build_follow_up_context(previous: Optional["PropertyEntities"]) -> Optional
         "Previous turn's extracted entities, for follow-up merging:\n"
         f"{json.dumps(previous.model_dump(mode='json'))}"
     )
+
 
 def _call_groq(
     client: Groq,
@@ -180,6 +195,7 @@ def _call_groq(
         messages.append({"role": "system", "content": retry_hint})
     messages.append({"role": "user", "content": user_query})
 
+    record_call("groq")
     response = client.chat.completions.create(
         model=GROQ_MODEL,
         messages=messages,
@@ -187,6 +203,7 @@ def _call_groq(
         temperature=0,
     )
     return response.choices[0].message.content
+
 
 def extract_entities(
     user_query: str,
@@ -214,6 +231,7 @@ def extract_entities(
             retry_hint = f"Your previous response was invalid: {exc}. Return valid JSON matching the schema exactly."
 
     raise EntityExtractionError(f"failed to extract valid entities after {MAX_EXTRACTION_ATTEMPTS} attempts") from last_error
+
 
 def _sanitize_property_type(entities: PropertyEntities) -> PropertyEntities:
     if entities.property_type and entities.property_type.strip().lower() in GENERIC_PROPERTY_TYPE_TERMS:

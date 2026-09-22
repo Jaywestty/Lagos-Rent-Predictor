@@ -9,21 +9,27 @@ from query.query_engine import run_lookup, run_affordability, run_comparison
 from query.response import build_lookup_response, build_affordability_response, build_comparison_response
 from conversation.session import load_session_entities, save_session_entities
 from advice.advice_engine import answer_advice_query
+from observability.tracer import start_trace, trace_stage
 
 logger.add("logs/cli.log", rotation="10 MB", retention="14 days", level="INFO")
 
 app = typer.Typer()
 
+
 def _run_and_print(entities: PropertyEntities, raw_query: str) -> None:
+    query_type_value = entities.query_type.value
+
     if entities.query_type == QueryType.LOOKUP:
-        listings = run_lookup(entities)
+        with trace_stage("query_execution", query_type_value):
+            listings = run_lookup(entities)
         result = build_lookup_response(entities, listings)
         typer.echo(result["message"])
         for item in result["results"]:
             typer.echo(f"- {item['title']} | {item['price']} | {item['area']} | {item['url']}")
 
     elif entities.query_type == QueryType.AFFORDABILITY:
-        aff_result = run_affordability(entities)
+        with trace_stage("query_execution", query_type_value):
+            aff_result = run_affordability(entities)
         result = build_affordability_response(entities, aff_result)
         typer.echo(result["message"])
         for area in result["areas"]:
@@ -39,7 +45,8 @@ def _run_and_print(entities: PropertyEntities, raw_query: str) -> None:
                     typer.echo(f"  - {item['title']} | {item['price']} | {item['url']}")
 
     elif entities.query_type == QueryType.COMPARISON:
-        comp_result = run_comparison(entities)
+        with trace_stage("query_execution", query_type_value):
+            comp_result = run_comparison(entities)
         result = build_comparison_response(entities, comp_result)
         typer.echo(result["message"])
         for option in result["options"]:
@@ -48,9 +55,10 @@ def _run_and_print(entities: PropertyEntities, raw_query: str) -> None:
                 typer.echo(f"  [note: {option['caveat']}]")
             for item in option["results"]:
                 typer.echo(f"  - {item['title']} | {item['price']} | {item['area']} | {item['url']}")
-    
+
     elif entities.query_type == QueryType.ADVICE:
-        result = answer_advice_query(entities.resolved_query or raw_query)
+        with trace_stage("advice_synthesis", query_type_value):
+            result = answer_advice_query(entities.resolved_query or raw_query)
         typer.echo(result["answer"])
         if result["sources"]:
             typer.echo("\nSources:")
@@ -60,8 +68,10 @@ def _run_and_print(entities: PropertyEntities, raw_query: str) -> None:
 
 @app.command()
 def query(text: str):
+    start_trace()
     try:
-        entities = extract_entities(text)
+        with trace_stage("extraction"):
+            entities = extract_entities(text)
     except EntityExtractionError as exc:
         logger.error("Entity extraction failed: {}", exc)
         typer.echo(f"Could not understand that query: {exc}")
@@ -73,7 +83,7 @@ def query(text: str):
         logger.error("Query failed: {}", exc)
         typer.echo("Search failed. Try again.")
         raise typer.Exit(code=1)
-    
+
 
 @app.command()
 def chat(session_id: Optional[str] = None):
@@ -86,10 +96,12 @@ def chat(session_id: Optional[str] = None):
         if text.strip().lower() in ("exit", "quit"):
             break
 
+        start_trace()
         previous_entities = load_session_entities(session_id)
 
         try:
-            entities = extract_entities(text, previous_entities=previous_entities)
+            with trace_stage("extraction"):
+                entities = extract_entities(text, previous_entities=previous_entities)
         except EntityExtractionError as exc:
             logger.error("Entity extraction failed: {}", exc)
             typer.echo(f"Could not understand that: {exc}")
@@ -103,6 +115,7 @@ def chat(session_id: Optional[str] = None):
             continue
 
         save_session_entities(session_id, entities)
+
 
 @app.command()
 def serve(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):

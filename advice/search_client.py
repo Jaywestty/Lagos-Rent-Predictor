@@ -4,6 +4,7 @@ from loguru import logger
 from tavily import TavilyClient
 
 from config import TAVILY_API_KEY
+from observability.tracer import record_call
 
 MAX_SEARCH_RESULTS = 5
 
@@ -23,6 +24,7 @@ def search_advice(query: str) -> list[dict]:
         raise SearchError("query text is empty")
 
     client = _get_client()
+    record_call("tavily")
     try:
         response = client.search(
             query=query,

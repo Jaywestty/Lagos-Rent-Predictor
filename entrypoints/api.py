@@ -9,6 +9,7 @@ from query.query_engine import run_lookup, run_affordability, run_comparison
 from query.response import build_lookup_response, build_affordability_response, build_comparison_response
 from conversation.session import load_session_entities, save_session_entities
 from advice.advice_engine import answer_advice_query
+from observability.tracer import start_trace, trace_stage
 
 logger.add("logs/app.log", rotation="10 MB", retention="14 days", level="INFO")
 
@@ -22,27 +23,34 @@ class QueryRequest(BaseModel):
 
 @app.post("/query")
 def query_listings(request: QueryRequest):
+    start_trace()
     previous_entities = load_session_entities(request.session_id) if request.session_id else None
 
     try:
-        entities = extract_entities(request.query, previous_entities=previous_entities)
+        with trace_stage("extraction"):
+            entities = extract_entities(request.query, previous_entities=previous_entities)
     except EntityExtractionError as exc:
         logger.error("Entity extraction failed for query='{}': {}", request.query, exc)
         raise HTTPException(status_code=422, detail="Could not understand the query.") from exc
 
+    query_type_value = entities.query_type.value
+
     try:
         if entities.query_type == QueryType.LOOKUP:
-            listings = run_lookup(entities)
+            with trace_stage("query_execution", query_type_value):
+                listings = run_lookup(entities)
             result = build_lookup_response(entities, listings)
         elif entities.query_type == QueryType.AFFORDABILITY:
-            aff_result = run_affordability(entities)
+            with trace_stage("query_execution", query_type_value):
+                aff_result = run_affordability(entities)
             result = build_affordability_response(entities, aff_result)
         elif entities.query_type == QueryType.COMPARISON:
-            comp_result = run_comparison(entities)
+            with trace_stage("query_execution", query_type_value):
+                comp_result = run_comparison(entities)
             result = build_comparison_response(entities, comp_result)
-
         elif entities.query_type == QueryType.ADVICE:
-            result = answer_advice_query(entities.resolved_query or request.query)
+            with trace_stage("advice_synthesis", query_type_value):
+                result = answer_advice_query(entities.resolved_query or request.query)
         else:
             raise HTTPException(status_code=501, detail=f"Query type '{entities.query_type.value}' is not supported.")
     except HTTPException:
