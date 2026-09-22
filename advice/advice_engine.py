@@ -5,6 +5,7 @@ from loguru import logger
 
 from advice.search_client import SearchError, search_advice
 from config import GROQ_API_KEY, GROQ_MODEL
+from observability.tracer import record_call
 
 SYNTHESIS_SYSTEM_PROMPT = """You are a helpful assistant answering questions about renting or buying
 property in Lagos, Nigeria — things like rent negotiation norms, agent fees, deposits, tenancy
@@ -61,6 +62,7 @@ def answer_advice_query(user_query: str) -> dict:
     context = _format_search_context(results)
 
     try:
+        record_call("groq")
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
