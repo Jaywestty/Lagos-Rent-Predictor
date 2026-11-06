@@ -8,11 +8,12 @@ from dotenv import load_dotenv
 from groq import Groq
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, model_validator
+
+from config import GROQ_MODEL
 from observability.tracer import record_call
 
 load_dotenv()
 
-GROQ_MODEL = "llama-3.3-70b-versatile"
 MAX_EXTRACTION_ATTEMPTS = 2
 
 GENERIC_PROPERTY_TYPE_TERMS = {

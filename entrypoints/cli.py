@@ -1,3 +1,5 @@
+import sys
+
 import typer
 from loguru import logger
 
@@ -10,6 +12,10 @@ from query.response import build_lookup_response, build_affordability_response, 
 from conversation.session import load_session_entities, save_session_entities
 from advice.advice_engine import answer_advice_query
 from observability.tracer import start_trace, trace_stage
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 logger.add("logs/cli.log", rotation="10 MB", retention="14 days", level="INFO")
 
