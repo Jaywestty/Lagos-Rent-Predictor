@@ -14,4 +14,4 @@ def get_env(name: str, default: str = None, required: bool = False) -> str:
 
 GROQ_API_KEY = get_env("GROQ_API_KEY")
 TAVILY_API_KEY = get_env("TAVILY_API_KEY")
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = get_env("GROQ_MODEL", "openai/gpt-oss-120b")

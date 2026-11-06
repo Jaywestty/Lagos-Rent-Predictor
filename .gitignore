@@ -24,3 +24,8 @@ __pycache__/
 logs/
 eval/reports/
 STATUS_REPORT.md
+.venv/
+node_modules/
+dist/
+.vite/
+coverage/
