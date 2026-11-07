@@ -21,6 +21,13 @@ logger.add("logs/app.log", rotation="10 MB", retention="14 days", level="INFO")
 
 app = FastAPI(title="Lagos House Hunter AI")
 
+try:
+    from admin.api import router as admin_router
+
+    app.include_router(admin_router)
+except Exception as _adm_exc:
+    logger.warning("admin router not loaded: {}", _adm_exc)
+
 _idempotency_cache: dict[str, dict] = {}
 
 

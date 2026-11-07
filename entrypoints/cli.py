@@ -129,6 +129,17 @@ def migrate():
 
 
 @app.command()
+def create_admin():
+    import os
+
+    from admin.auth import create_admin as _create_admin
+    email = os.getenv("ADMIN_EMAIL") or typer.prompt("Admin email")
+    password = os.getenv("ADMIN_PASSWORD") or typer.prompt("Admin password", hide_input=True)
+    admin_id = _create_admin(email, password)
+    typer.echo(f"Created admin id {admin_id} for {email}")
+
+
+@app.command()
 def serve(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):
     import uvicorn
     uvicorn.run("entrypoints.api:app", host=host, port=port, reload=reload)
