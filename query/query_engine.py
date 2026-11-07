@@ -4,9 +4,9 @@ from loguru import logger
 from sqlalchemy import text
 
 from db import get_engine
+from observability.tracer import record_call
 from query.entities import PropertyEntities, QueryType
 from scraping.location_normalizer import normalize_location
-from observability.tracer import record_call
 
 LOOKUP_RESULT_LIMIT = 10
 AFFORDABILITY_RESULT_LIMIT = 30
@@ -185,3 +185,49 @@ def run_comparison(entities: PropertyEntities) -> dict:
         results[option.label] = [dict(row) for row in rows]
 
     return results
+
+
+def fetch_rent_stats(area=None, beds=None, property_type=None):
+    from query.stats import annualized_price, bucket_for
+
+    normalized_area = None
+    if area:
+        try:
+            normalized_area = normalize_location(area).get("area") or area
+        except Exception:
+            normalized_area = area
+    filters = ["is_duplicate_of IS NULL", "price_ngn IS NOT NULL", "price_ngn > 0", "listing_type = 'rent'"]
+    params: dict[str, Any] = {}
+    if normalized_area:
+        filters.append("area = :area")
+        params["area"] = normalized_area
+    if beds is not None:
+        filters.append("bedrooms = :beds")
+        params["beds"] = beds
+    if property_type:
+        filters.append("property_type = :property_type")
+        params["property_type"] = property_type
+    where_clause = " AND ".join(filters)
+    sql = text(
+        f"SELECT price_ngn, price_period, bedrooms, property_type, created_at, scraped_at FROM listings WHERE {where_clause}"
+    )
+    engine = get_engine()
+    record_call("db")
+    with engine.connect() as conn:
+        rows = conn.execute(sql, params).mappings().all()
+    all_values = []
+    buckets: dict[str, list] = {"self_contain": [], "one_bedroom": [], "two_bedroom": [], "three_bedroom": []}
+    data_as_of = None
+    for row in rows:
+        annual = annualized_price(row["price_ngn"], row["price_period"])
+        if annual is None:
+            continue
+        all_values.append(annual)
+        bucket = bucket_for(row["bedrooms"], row["property_type"])
+        if bucket in buckets:
+            buckets[bucket].append(annual)
+        for key in ("created_at", "scraped_at"):
+            val = row[key]
+            if val and (data_as_of is None or val > data_as_of):
+                data_as_of = val
+    return {"buckets": buckets, "all_values": all_values, "data_as_of": data_as_of, "area": normalized_area}
