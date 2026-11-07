@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Lagos Rent Assistant"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "argon2-cffi>=25.1.0",
     "beautifulsoup4==4.15.0",
     "fastapi==0.141.1",
     "groq==1.7.0",
