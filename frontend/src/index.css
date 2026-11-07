@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --forest: #145c45;
+  --action: #21845f;
+  --soft: #e8f3ed;
+  --bg: #f7f8f6;
+  --surface: #ffffff;
+  --elevated: #ffffff;
+  --text: #202923;
+  --secondary: #64716a;
+  --border: #d6ddd8;
+  --warn: #a66a13;
+  --danger: #b93838;
+  --primary: #21845f;
+}
+.dark {
+  --bg: #101713;
+  --surface: #19231d;
+  --elevated: #202d25;
+  --text: #f1f5f2;
+  --secondary: #a6b5aa;
+  --border: #34443a;
+  --warn: #e6b65d;
+  --danger: #f08080;
+  --primary: #75c69c;
+  --soft: #202d25;
+}
+body { background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+@media (min-width: 768px) { .card { border-radius: 16px; } }
+.tabular { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+@keyframes pulse { 0%,100% { opacity: .45 } 50% { opacity: 1 } }
+.pulse { animation: pulse 1.2s ease-in-out infinite; }
+@keyframes rise { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+.rise { animation: rise 180ms ease-out both; }
