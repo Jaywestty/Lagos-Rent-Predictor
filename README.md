@@ -114,7 +114,20 @@ uv run python eval/advice_eval.py
 
 Frontend:
 
-- Planned in Phase 5. No frontend directory exists yet. When present, run the Vite dev server from frontend/ after npm install.
+```powershell
+npm install --prefix frontend
+npm run dev --prefix frontend
+npm test --prefix frontend
+npm run build --prefix frontend
+npm run lint --prefix frontend
+```
+
+Migrations and admin creation:
+
+```powershell
+uv run python -m entrypoints.cli migrate
+uv run python -m entrypoints.cli create-admin
+```
 
 Tests:
 
@@ -194,12 +207,9 @@ Advice (general renting questions):
 }
 ```
 
-### Planned endpoints (not implemented yet)
+POST /api/chat and POST /api/chat/stream return a typed versioned answer with status (success, low_data, no_data, clarification, out_of_scope, error), headline, 4 property breakdowns, median, listing count, range method (percentile for 10 plus or min_max), data as of, confidence, follow ups, request id and latency. POST /api/chat/stream sends SSE events status, delta, final and error. Both support X-Request-Key idempotency and a request timeout. POST /query keeps legacy keys and also adds answer.
 
-- POST /api/chat with typed versioned answer contract, SSE streaming and idempotency keys: planned for Phase 4A.
-- Question analytics logging tables and admin analytics endpoints: planned for Phase 4B and Phase 4C.
-- All routes under /admin for auth, analytics, scraper runs, freshness and review queue: planned for Phase 4C.
-- React public screens and admin screens under frontend/: planned for Phase 5.
+Admin routes under /admin implement login, logout, me, analytics overview with six KPIs, questions over time, top areas, recent questions, scraper runs, freshness, review queue, manual scrape with polling and logs, and PATCH review. All require a session cookie and CSRF token for state changes.
 
 ## Data rules
 
