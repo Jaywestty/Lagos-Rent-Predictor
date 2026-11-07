@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lagos-rent"
+version = "0.1.0"
+description = "Lagos Rent Assistant"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "beautifulsoup4==4.15.0",
+    "fastapi==0.141.1",
+    "groq==1.7.0",
+    "loguru==0.7.3",
+    "numpy==2.5.3",
+    "pandas==3.0.6",
+    "psycopg2-binary==2.9.13",
+    "pydantic==2.13.5",
+    "python-dotenv==1.2.3",
+    "rapidfuzz==3.14.6",
+    "requests==2.34.2",
+    "sqlalchemy==2.0.54",
+    "tavily-python==0.8.4",
+    "typer==0.27.2",
+    "uvicorn[standard]==0.53.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.27",
+    "mypy>=1.10",
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"eval/*.py" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
