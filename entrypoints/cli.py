@@ -1,17 +1,15 @@
 import sys
+import uuid
 
 import typer
 from loguru import logger
 
-import uuid
-from typing import Optional
-
-from query.entities import EntityExtractionError, PropertyEntities, QueryType, extract_entities
-from query.query_engine import run_lookup, run_affordability, run_comparison
-from query.response import build_lookup_response, build_affordability_response, build_comparison_response
-from conversation.session import load_session_entities, save_session_entities
 from advice.advice_engine import answer_advice_query
+from conversation.session import load_session_entities, save_session_entities
 from observability.tracer import start_trace, trace_stage
+from query.entities import EntityExtractionError, PropertyEntities, QueryType, extract_entities
+from query.query_engine import run_affordability, run_comparison, run_lookup
+from query.response import build_affordability_response, build_comparison_response, build_lookup_response
 
 for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
@@ -81,18 +79,18 @@ def query(text: str):
     except EntityExtractionError as exc:
         logger.error("Entity extraction failed: {}", exc)
         typer.echo(f"Could not understand that query: {exc}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
     try:
         _run_and_print(entities, text)
     except Exception as exc:
         logger.error("Query failed: {}", exc)
         typer.echo("Search failed. Try again.")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command()
-def chat(session_id: Optional[str] = None):
+def chat(session_id: str | None = None):
     session_id = session_id or str(uuid.uuid4())
     typer.echo(f"Session: {session_id}")
     typer.echo("Type your query, or 'exit' to quit.")
@@ -121,6 +119,13 @@ def chat(session_id: Optional[str] = None):
             continue
 
         save_session_entities(session_id, entities)
+
+
+@app.command()
+def migrate():
+    from analytics_logging import apply_migrations
+    applied = apply_migrations()
+    typer.echo(f"Applied migrations: {', '.join(applied)}")
 
 
 @app.command()

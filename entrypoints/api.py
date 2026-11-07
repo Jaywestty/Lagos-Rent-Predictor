@@ -119,6 +119,12 @@ def query_listings(request: QueryRequest, http_request: Request):
     except Exception as exc:
         logger.error("Query failed for query='{}': {}", request.query, exc)
         latency_ms = (time.perf_counter() - t0) * 1000
+        try:
+            from analytics_logging import log_question
+
+            log_question(request_id, session_id=request.session_id, raw_question=request.query, status="error", listing_count=0, confidence="insufficient", latency_ms=latency_ms, error_code="query_failed")
+        except Exception as log_exc:
+            logger.warning("failure log failed: {}", log_exc)
         return _error_payload("Search failed. Try again.", request_id, latency_ms, "error")
     latency_ms = (time.perf_counter() - t0) * 1000
     if request.session_id:
@@ -131,6 +137,24 @@ def query_listings(request: QueryRequest, http_request: Request):
         ).model_dump(mode="json")
     else:
         payload = _enrich_with_contract(result, entities, request_id, latency_ms)
+    try:
+        from analytics_logging import log_question
+
+        ans = payload.get("answer", {}) if isinstance(payload, dict) else {}
+        log_question(
+            request_id,
+            session_id=request.session_id,
+            raw_question=request.query,
+            parsed_location=entities.area,
+            parsed_property_type=entities.property_type,
+            status=ans.get("status", "error"),
+            listing_count=ans.get("listing_count", 0),
+            confidence=ans.get("confidence"),
+            latency_ms=latency_ms,
+            error_code=None if ans.get("status") not in ("error",) else "query_failed",
+        )
+    except Exception as exc:
+        logger.warning("question log failed: {}", exc)
     if key:
         _idempotency_cache[key] = payload
     return payload
