@@ -1,257 +1,175 @@
-# Lagos Rent Assistant
+# Lagos Rent
 
-A conversational rent research app for Lagos residents. A user asks a question in natural language, for example how much is rent in Gbagada or what about a 2 bedroom, and gets an answer built only from scraped listings stored in PostgreSQL.
+Rent research for Lagos, answered from real listings.
 
-Core rule: every rent figure must be traceable to actual listings. When the database cannot support an answer, the interface must say so. The UI must never look more confident than the data.
+Ask a question in plain language, such as *"How much is a 2 bedroom in Yaba?"*, and get the typical yearly rent, the price range, and the listings behind the answer. Every rent figure comes from property listings collected each week. When the data is thin, the app says so instead of guessing.
 
-## Architecture
+## Features
+
+- **Ask in plain language.** Questions are parsed by an LLM into area, size and budget, then answered with SQL over stored listings. Follow-up questions keep context ("what about a 3 bedroom?").
+- **Clear answers.** Typical rent, the range most listings fall in, a breakdown by size, how many listings were used, how fresh they are, and a confidence level.
+- **Area guides.** Rent by size, weekly price trends, newest listings, and notes on commute, flooding, power, safety and amenities, summarised from cited web sources.
+- **Compare areas.** Up to three areas side by side for a chosen size.
+- **Move-in cost calculator.** Yearly rent plus agency, legal and caution fees, service charge and moving costs.
+- **Saved searches and favourites.** Kept per device, no sign-up.
+- **Weekly data refresh.** A scheduled job collects listings from the last 7 days and loads them automatically.
+- **Private admin console.** Usage analytics, scraper operations, and full observability: traffic, latency, errors, AI call costs and data quality.
+
+## How it works
 
 ```mermaid
 flowchart LR
-    User --> API[entrypoints/api.py FastAPI]
-    User --> CLI[entrypoints/cli.py Typer]
-    API --> Entities[query/entities.py Groq extraction]
-    CLI --> Entities
-    Entities --> Engine[query/query_engine.py SQL over Postgres]
-    Engine --> DB[(PostgreSQL)]
-    API --> Advice[advice/ Groq plus Tavily]
-    Advice --> Entities
-    API --> Session[conversation/session.py]
-    Session --> DB
-    Engine --> Tracer[observability/tracer.py]
-    Advice --> Tracer
-    Scraper[scraping/scraper.py] --> CSV[data/raw/lagos_properties.csv]
-    CSV --> Loader[pipeline/load_data.py]
-    Loader --> DB
-    Eval[eval/ golden extraction and advice] --> Entities
-    Eval --> Advice
+    Cron[GitHub Actions, weekly] --> Scraper[Scraper: last 7 days]
+    Scraper --> Loader[Loader: clean, dedupe, upsert]
+    Loader --> DB[(PostgreSQL / Supabase)]
+    Loader --> Snap[Weekly price snapshots]
+    Snap --> DB
+    User[Web app] --> API[FastAPI]
+    API --> LLM[Groq: understand the question]
+    API --> DB
+    API --> Guides[Area guides: Tavily + Groq, cached]
+    Guides --> DB
+    API --> Obs[Observability events]
+    Obs --> DB
 ```
 
-## Repo layout
+1. **Collect.** Every Monday at 02:00 Lagos time, a GitHub Actions workflow scrapes rent listings from NigeriaPropertyCentre and PropertyPro, newest first. It keeps only listings dated within the last 7 days.
+2. **Load.** Listings are normalised (area names, monthly to yearly prices), de-duplicated, and upserted into Postgres. Weekly price snapshots are recomputed for trends.
+3. **Answer.** The API extracts what the user is asking, queries matching listings, and returns a typed answer with figures, range method and confidence.
 
-- entrypoints/ : FastAPI app and Typer CLI
-- query/ : entity extraction, SQL query engines and response builders
-- conversation/ : session storage with a 6 hour TTL
-- advice/ : Tavily search plus Groq grounded synthesis
-- observability/ : trace stages and call counts in the traces table
-- scraping/ : NigeriaPropertyCentre and PropertyPro scrapers and location normalizer
-- pipeline/ : CSV loader with dedup and quality report, plus one off backfills
-- sql/ : schema for listings, location aliases, sessions and traces
-- eval/ : golden extraction cases and advice evaluation scripts
-- data/ : scraper output and known area files (local, gitignored)
-- docs/ : orientation.md, cleanup.md and later handoff notes
-- frontend/ : Vite React app with public chat and admin UI
-- .github/workflows/ : weekly scrape and load job
+## Tech stack
 
-## Prerequisites
+| Layer | Tools |
+| --- | --- |
+| Backend | Python 3.12, FastAPI, SQLAlchemy, Pydantic, Typer |
+| Data | PostgreSQL (Supabase), pandas, RapidFuzz |
+| AI | Groq (question understanding, guide writing), Tavily (web search) |
+| Scraping | requests, BeautifulSoup |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, TanStack Query |
+| Tooling | uv, Ruff, mypy, pytest, Vitest, ESLint |
+| Scheduling | GitHub Actions |
 
-- uv that can install Python 3.12
-- Python 3.12 (see .python-version)
-- Node LTS (needed for Phase 5 frontend)
-- A hosted Postgres database (the project uses Supabase). docker-compose.yml is kept only as an optional local fallback.
+## Getting started
 
-## Setup
+### Prerequisites
 
-```powershell
-Copy-Item .env.example .env
-# Edit .env: set DATABASE_URL to the Supabase Session pooler URI
-# (Supabase > Connect > Session pooler), plus GROQ_API_KEY, TAVILY_API_KEY, GROQ_MODEL.
+- [uv](https://docs.astral.sh/uv/) (installs Python 3.12)
+- Node.js 20 or newer
+- A PostgreSQL database (Supabase works out of the box)
+- API keys for [Groq](https://console.groq.com) and [Tavily](https://tavily.com)
+
+### Setup
+
+```bash
+git clone https://github.com/Jaywestty/Lagos-Rent-Predictor.git
+cd Lagos-Rent-Predictor
+cp .env.example .env          # then fill in the values below
 uv sync
-uv run python -m entrypoints.cli migrate
-```
-
-## Environment variables
-
-Built from config.py, db.py and .env.example:
-
-| Variable | Required | Default | Used for |
-| --- | --- | --- | --- |
-| DATABASE_URL | yes for hosted DB | none | Full Postgres URI (Supabase). Wins over POSTGRES_* when set. TLS is required automatically for non-local hosts |
-| POSTGRES_USER | no | lagos_rent | Postgres user |
-| POSTGRES_PASSWORD | no | lagos_rent | Postgres password |
-| POSTGRES_DB | no | lagos_rent | Postgres database |
-| POSTGRES_HOST | no | localhost | Postgres host |
-| POSTGRES_PORT | no | 5432 | Postgres port |
-| GROQ_API_KEY | yes for extraction and advice | none | Groq entity extraction and advice synthesis |
-| TAVILY_API_KEY | yes for advice | none | Tavily web search for advice |
-| GROQ_MODEL | no | openai/gpt-oss-120b | Groq model name |
-
-Never commit .env. Never print its values.
-
-## How to run
-
-Backend:
-
-```powershell
-uv run uvicorn entrypoints.api:app --host 0.0.0.0 --port 8000
-```
-
-CLI:
-
-```powershell
-uv run python -m entrypoints.cli query "2 bedroom in Gbagada"
-uv run python -m entrypoints.cli chat
-uv run python -m entrypoints.cli serve
-```
-
-Scraper (writes data/raw/lagos_properties.csv):
-
-```powershell
-uv run python scraping/scraper.py --site npc --category houses --type rent --max-pages 5
-```
-
-Weekly scrape and load (what the scheduler runs). Migrates, scrapes only rent listings
-from the last 7 days, newest pages first, then loads them into the database and records
-one scraper_runs row:
-
-```powershell
-uv run python -m entrypoints.cli weekly-scrape --since-days 7 --max-pages 30
-```
-
-Pipeline load (applies sql/schema.sql and upserts listings):
-
-```powershell
-uv run python pipeline/load_data.py --csv data/raw/lagos_properties.csv
-```
-
-Evals (need live Groq and Tavily keys; advice eval uses live web search):
-
-```powershell
-uv run python eval/extraction_eval.py
-uv run python eval/advice_eval.py
-```
-
-Frontend:
-
-```powershell
 npm install --prefix frontend
-npm run dev --prefix frontend
-npm test --prefix frontend
-npm run build --prefix frontend
-npm run lint --prefix frontend
+uv run python -m entrypoints.cli migrate
 ```
 
-Migrations and admin creation:
+### Environment variables
 
-```powershell
-uv run python -m entrypoints.cli migrate
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | Yes | Postgres connection string. For Supabase, use the Session pooler URI. TLS is enabled automatically for remote hosts. |
+| `GROQ_API_KEY` | Yes | Understanding questions and writing area guides |
+| `TAVILY_API_KEY` | Yes | Web search for area guides and general advice |
+| `GROQ_MODEL` | No | Defaults to `openai/gpt-oss-120b` |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | No | Used once by `create-admin` |
+| `POSTGRES_*` | No | Local Postgres fallback when `DATABASE_URL` is not set |
+
+Never commit `.env`.
+
+### Run locally
+
+```bash
+uv run uvicorn entrypoints.api:app --port 8000     # API
+npm run dev --prefix frontend                       # Web app on http://localhost:5173
+```
+
+The Vite dev server proxies `/api` to the backend.
+
+### Load data
+
+```bash
+# Scrape the last 7 days and load it (what the weekly job runs)
+uv run python -m entrypoints.cli weekly-scrape --since-days 7 --max-pages 30
+
+# Pre-build area guides for the 15 busiest areas
+uv run python -m entrypoints.cli warm-guides --top 15
+```
+
+### Admin access
+
+The admin console lives at `/admin` and is not linked anywhere in the public site. Accounts can only be created from the command line:
+
+```bash
 uv run python -m entrypoints.cli create-admin
 ```
 
-Tests:
+Admin sessions use Argon2-hashed passwords, HttpOnly cookies, CSRF tokens on every change, and login lockout after repeated failures.
 
-```powershell
-uv run pytest
+## Scheduled scraping
+
+`.github/workflows/weekly-scrape.yml` runs every Monday at 01:00 UTC on GitHub's servers. It also has a **Run workflow** button in the Actions tab for manual runs.
+
+To enable it, add these repository secrets under *Settings → Secrets and variables → Actions*:
+
+- `DATABASE_URL` (required)
+- `GROQ_API_KEY`, `TAVILY_API_KEY` (optional, for pre-building area guides)
+
+Scheduled workflows run only from the default branch. Each run uploads its CSV and quality report as a workflow artifact for 30 days.
+
+## Testing and quality
+
+```bash
+uv run pytest            # backend tests (never touch the real database)
 uv run ruff check
-uv run mypy
+npm test --prefix frontend
+npm run lint --prefix frontend
+npm run build --prefix frontend   # includes a bundle size budget
 ```
 
-## API contract
+## Project structure
 
-### Public endpoints (implemented)
-
-GET /health:
-
-```json
-{ "status": "ok" }
+```
+admin/          Admin API: auth, analytics, operations, observability
+advice/         Web search, advice answers and area guides
+conversation/   Session memory for follow-up questions
+entrypoints/    FastAPI app, public API routes and the Typer CLI
+eval/           Extraction and advice evaluation sets
+observability/  Request, error, AI-call and usage event recording
+pipeline/       CSV loader with de-duplication and a quality report
+query/          Question parsing, SQL queries, stats, trends and answer shape
+scraping/       Listing scrapers, location normaliser and the scrape-and-load runner
+sql/            Base schema and numbered migrations
+frontend/       React web app and admin console
+tests/          Backend tests
 ```
 
-POST /query with JSON body:
+## API overview
 
-```json
-{ "query": "2 bedroom in Gbagada", "session_id": "optional string" }
-```
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/api/chat` | Ask a question; returns a typed answer plus matching listings |
+| `POST` | `/api/chat/stream` | Same, as server-sent events |
+| `GET` | `/api/areas` | Areas with listing counts and typical rent |
+| `GET` | `/api/areas/{area}` | Rent by size and trend for one area |
+| `GET` | `/api/areas/{area}/guide` | Area guide with cited sources |
+| `GET` | `/api/areas/{area}/trends` | Weekly typical rent for a size |
+| `GET` | `/api/areas/{area}/listings` | Newest listings in an area |
+| `GET` | `/api/compare?areas=A,B,C&beds=2` | Side-by-side comparison |
+| `GET` `POST` `DELETE` | `/api/me/saved-searches`, `/api/me/favorites` | Per-device saved items (`X-Client-Id` header) |
+| `GET` | `/health` | Health check |
 
-Response depends on query type. All responses include query_type.
+Admin endpoints live under `/api/admin` and require an admin session.
 
-Lookup:
+## Data notes
 
-```json
-{
-  "query_type": "lookup",
-  "matched_count": 3,
-  "message": "Found 3 matching listing(s).",
-  "results": [
-    { "title": "string", "price": "NGN 1500000/year", "area": "Gbagada", "subarea": "string", "bedrooms": 2, "url": "string" }
-  ]
-}
-```
-
-Lookup with no matches returns matched_count 0 and an empty results list.
-
-Affordability (budget question):
-
-```json
-{
-  "query_type": "affordability",
-  "budget_ngn": 500000,
-  "matched_count": 2,
-  "message": "string",
-  "areas": [
-    { "area": "string", "matched_count": 2, "sparse": false, "results": [] }
-  ],
-  "stretch_options": []
-}
-```
-
-Comparison (two or more options):
-
-```json
-{
-  "query_type": "comparison",
-  "message": "string",
-  "options": [
-    { "label": "2 bedroom in Ikeja", "matched_count": 2, "caveat": null, "cheapest": "NGN 1200000/year", "results": [] }
-  ]
-}
-```
-
-Advice (general renting questions):
-
-```json
-{
-  "query_type": "advice",
-  "answer": "string",
-  "sources": [ { "title": "string", "url": "string" } ]
-}
-```
-
-POST /api/chat and POST /api/chat/stream return a typed versioned answer with status (success, low_data, no_data, clarification, out_of_scope, error), headline, 4 property breakdowns, median, listing count, range method (percentile for 10 plus or min_max), data as of, confidence, follow ups, request id and latency. POST /api/chat/stream sends SSE events status, delta, final and error. Both support X-Request-Key idempotency and a request timeout. POST /query keeps legacy keys and also adds answer.
-
-Admin routes under /api/admin implement login, logout, me, analytics overview with six KPIs, questions over time, top areas, recent questions, scraper runs, freshness, review queue, manual scrape with polling and logs, and PATCH review. All require a session cookie and CSRF token for state changes.
-
-## Product features
-
-- Ask: natural-language rent questions answered from listings, with a median-first answer card, range strips per size, confidence, freshness and the listings behind it. Quick-search chips for area, size and budget.
-- Area guides (/areas, /areas/:area): rent by size, weekly trend, newest listings, a move-in cost calculator, and "living here" notes (commute, flooding, power, safety, amenities) built from cited web sources and cached 30 days. Pre-build them with `uv run python -m entrypoints.cli warm-guides --top 15`.
-- Compare (/compare): up to three areas side by side for one size, with ranges, trends and a median table.
-- Move-in cost (/move-in): yearly rent plus agency, legal and caution fees, service charge and moving costs, all editable.
-- Saved (/saved): saved searches with today's median, and favourite listings, kept per device without an account.
-- Admin observability (/admin/observability): health alerts, traffic and p50/p95 latency per route, server errors with stack traces, every Groq and Tavily call with latency and tokens, pipeline stages, answer quality and unanswered areas, data quality, scraper status and next run, feature usage, guide rebuilds, and a request-id trace view.
-
-Public endpoints added: GET /api/areas, /api/areas/{area}, /api/areas/{area}/trends, /api/areas/{area}/listings, /api/areas/{area}/guide, /api/compare, GET/POST/DELETE /api/me/saved-searches and /api/me/favorites (X-Client-Id header), POST /api/events. Admin: /api/admin/observability/{overview,timeseries,errors,ai-calls,requests/{id},guides}.
-
-## Data rules
-
-- Rent is quoted per year in Lagos. The query engine annualizes monthly prices as price_ngn times 12 and treats year and null periods as already annual. Do not mix monthly and yearly figures silently.
-- The scraper detects period from page text. PropertyPro often omits period on the primary listing. Null period is treated as annual by the query engine, which is a known risk.
-- Pipeline sanity checks flag monthly rent above 10,000,000 NGN and yearly rent below 300,000 NGN, missing period on rent rows, property_type equal to lagos and missing locations. These flags live in the quality report only.
-- Deduplication groups by bedrooms, area, property_type and listing_type, then compares price within 5 percent and title similarity. High confidence pairs set is_duplicate_of. Medium pairs were intended as dedup_review_flag but that column was dropped before insert, so review flags are only in the report count.
-- Stale rows are never retired by the loader. Postgres can hold rows that are no longer in the current CSV.
-- Session memory keeps the last entities per session_id and expires after 6 hours. New queries inherit fields that are not explicitly changed.
-
-## Roadmap
-
-- Weekly scheduler: .github/workflows/weekly-scrape.yml runs every Monday 01:00 UTC (02:00 Lagos) and can be started by hand from the Actions tab. It needs a DATABASE_URL repository secret, and GitHub only runs scheduled workflows from the default branch, so it starts once this work is merged into main.
-- Recency: in weekly mode the scraper keeps a listing only if its source date is inside the window. NigeriaPropertyCentre uses the posted date (JSON-LD datePosted); PropertyPro uses its "Last updated" date. The date is stored in listings.listed_at.
-- Hosted database (Supabase) and the weekly CI scrape are now in place. Remaining from docs/next-steps.md: alerting on failed runs and deploying the API and frontend.
-- Phase 4A adds the typed answer contract with percentile ranges and confidence.
-- Phase 4B adds analytics logging and migrations.
-- Phase 4C adds the admin API.
-- Phase 5 adds the React frontend and admin UI.
-- Phase 6 is verification and handoff.
-
-## Notes
-
-- README was previously about the old Streamlit predictor. That project was removed in Phase 1. See docs/orientation.md for the actual architecture and docs/cleanup.md for what was removed.
-- The earlier status audit is folded into the Roadmap and Data rules sections above because it is no longer accurate in full: observability is now committed, .env.example exists, GROQ_MODEL is env configurable, and requirements were replaced by pyproject.toml and uv.lock in Phase 2. Known code smells from that audit that still apply are the duplicate listing_type filter in build_lookup_query, the stray numpy.ma import in pipeline/load_data.py, the page wide price regex in scraping/scraper.py and the missing dedup_review_flag column.
+- Lagos rent is quoted per year. Monthly prices are multiplied by 12. A listing with no stated period is treated as yearly.
+- Ranges use the 10th to 90th percentile once there are 10 or more listings, and the lowest to highest price below that.
+- Confidence is *solid* at 10 or more listings, *limited* at 4 to 9, and *very little data* at 3 or fewer.
+- Some source listings tag a yearly price as monthly. The app flags these on listing cards and in the admin data-quality view.
+- No IP addresses or personal data are stored. Saved items are tied to a random per-device ID.
