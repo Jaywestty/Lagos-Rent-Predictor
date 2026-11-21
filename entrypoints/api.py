@@ -1,5 +1,7 @@
 import asyncio
+import contextvars
 import json
+import re
 import time
 import uuid
 
@@ -11,6 +13,7 @@ from pydantic import BaseModel
 from advice.advice_engine import answer_advice_query
 from config import REQUEST_TIMEOUT_SECONDS
 from conversation.session import load_session_entities, save_session_entities
+from observability.events import install_http_middleware, record_error
 from observability.tracer import start_trace, trace_stage
 from query.answer import ChatAnswer, Clarification, compute_contract
 from query.entities import EntityExtractionError, QueryType, extract_entities
@@ -20,11 +23,19 @@ from query.response import build_affordability_response, build_comparison_respon
 logger.add("logs/app.log", rotation="10 MB", retention="14 days", level="INFO")
 
 app = FastAPI(title="Lagos House Hunter AI")
+install_http_middleware(app)
+
+from entrypoints.public_api import router as public_router  # noqa: E402
+
+app.include_router(public_router)
 
 try:
     from admin.api import router as admin_router
 
     app.include_router(admin_router)
+    from admin.observability import router as admin_obs_router
+
+    app.include_router(admin_obs_router)
 except Exception as _adm_exc:
     logger.warning("admin router not loaded: {}", _adm_exc)
 
@@ -76,6 +87,27 @@ def _enrich_with_contract(legacy: dict, entities, request_id: str, latency_ms: f
     return payload
 
 
+_PRICE_QUESTION = re.compile(r"\b(how much|price|prices|cost|rent|rents|budget|afford|cheap|expensive)\b", re.IGNORECASE)
+_BEDS_IN_TEXT = re.compile(r"\b([1-9])\s*-?\s*(?:bed|bedroom|bedrooms|br)\b", re.IGNORECASE)
+
+
+def _route_price_questions_to_listings(question: str, entities):
+    """A price question about a known area must be answered from listings, never from web search.
+
+    The extractor sometimes labels "how much is a 2 bedroom in Lekki?" as advice; web results then
+    quote sale prices or stale figures. Rent figures must stay traceable to listings.
+    """
+    if entities.query_type != QueryType.ADVICE or not entities.area or not _PRICE_QUESTION.search(question or ""):
+        return entities
+    update = {"query_type": QueryType.LOOKUP}
+    if entities.beds is None:
+        m = _BEDS_IN_TEXT.search(question)
+        if m:
+            update["beds"] = int(m.group(1))
+    logger.info("Re-routing advice-classified price question to lookup: {}", question)
+    return entities.model_copy(update=update)
+
+
 def _error_payload(message: str, request_id: str, latency_ms: float, status: str = "error") -> dict:
     ans = ChatAnswer(status=status, request_id=request_id, latency_ms=round(latency_ms, 2), message=message)
     return {"message": message, "answer": ans.model_dump(mode="json")}
@@ -84,7 +116,9 @@ def _error_payload(message: str, request_id: str, latency_ms: float, status: str
 @app.post("/query")
 def query_listings(request: QueryRequest, http_request: Request):
     t0 = time.perf_counter()
-    request_id = request.request_id or str(uuid.uuid4())
+    from observability.events import current_request_id
+
+    request_id = request.request_id or current_request_id.get() or str(uuid.uuid4())
     key = _resolve_key(request, http_request.headers)
     if key and key in _idempotency_cache:
         return _idempotency_cache[key]
@@ -96,6 +130,7 @@ def query_listings(request: QueryRequest, http_request: Request):
     except EntityExtractionError as exc:
         latency_ms = (time.perf_counter() - t0) * 1000
         logger.error("Entity extraction failed for query='{}': {}", request.query, exc)
+        record_error("extraction", exc, route="/query")
         payload = _error_payload("Could not understand the query.", request_id, latency_ms, "error")
         if key:
             _idempotency_cache[key] = payload
@@ -103,6 +138,7 @@ def query_listings(request: QueryRequest, http_request: Request):
     if not request.query or not str(request.query).strip():
         latency_ms = (time.perf_counter() - t0) * 1000
         return _error_payload("Query text is empty.", request_id, latency_ms, "clarification")
+    entities = _route_price_questions_to_listings(request.query, entities)
     query_type_value = entities.query_type.value
     try:
         if entities.query_type == QueryType.LOOKUP:
@@ -125,6 +161,7 @@ def query_listings(request: QueryRequest, http_request: Request):
             return _error_payload(f"Query type '{entities.query_type.value}' is not supported.", request_id, latency_ms, "out_of_scope")
     except Exception as exc:
         logger.error("Query failed for query='{}': {}", request.query, exc)
+        record_error("query", exc, route="/query")
         latency_ms = (time.perf_counter() - t0) * 1000
         try:
             from analytics_logging import log_question
@@ -177,7 +214,8 @@ async def api_chat(request: QueryRequest, http_request: Request):
 
 async def _run_chat_async(request: QueryRequest, http_request: Request):
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: query_listings(request, http_request))
+    ctx = contextvars.copy_context()  # keep the request id for observability inside the worker thread
+    return await loop.run_in_executor(None, lambda: ctx.run(query_listings, request, http_request))
 
 
 @app.post("/api/chat/stream")
