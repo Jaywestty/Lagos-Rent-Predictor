@@ -130,8 +130,9 @@ SITE_CONFIGS = {
         "detail_url_pattern": re.compile(r"/property/[a-z0-9-]+-[A-Za-z0-9]{5}$"),
         "page_param": "page",
         "page_start": 0,
-        # Newest first, so a recency-limited run can stop once it reaches old listings.
-        "recent_sort_query": "sort=postedOn&order=desc",
+        # No sort/order parameters: PropertyPro robots.txt disallows /*sort=* and /*order=*.
+        # The default listing order is already recent-first; the per-listing date filter and the
+        # stale-page stop keep runs to the last N days.
     },
 }
 
@@ -550,9 +551,6 @@ def crawl(site: str, category: str, listing_type: str, max_pages: int, inspect: 
 
     recent_mode = since_days is not None
     cutoff = datetime.now(UTC) - timedelta(days=since_days) if recent_mode else None
-    if recent_mode and config.get("recent_sort_query"):
-        sep = "&" if "?" in base_url else "?"
-        base_url = f"{base_url}{sep}{config['recent_sort_query']}"
 
     url_pattern = config["detail_url_pattern"]
     page_param = config["page_param"]
