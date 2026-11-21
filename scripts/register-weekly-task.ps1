@@ -3,7 +3,8 @@
   Registers (or updates) the "Lagos Rent weekly scrape" task in Windows Task Scheduler.
 
 .DESCRIPTION
-  Runs scripts\weekly-scrape.ps1 every Monday at 09:00 for the current user.
+  Runs scripts\weekly-scrape.ps1 every Monday at midnight (00:00) for the current user.
+  -StartDate sets the first run, for example 2026-11-30 to skip the coming week.
   If the laptop was off or asleep at that time, Windows runs it as soon as
   possible afterwards. Because each run looks back 7 days, a late run loses nothing.
   Waits for a network connection, works on battery, and stops after 6 hours.
@@ -12,7 +13,8 @@
 #>
 param(
     [string]$Day = "Monday",
-    [string]$At = "09:00"
+    [string]$At = "00:00",
+    [string]$StartDate = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,7 +24,9 @@ $repo = Split-Path -Parent $PSScriptRoot
 $action = New-ScheduledTaskAction -Execute "powershell.exe" `
     -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$script`"" `
     -WorkingDirectory $repo
-$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $Day -At $At
+# -At carries the date of the first run; with no -StartDate it is the next matching day.
+$first = if ($StartDate) { [datetime]::Parse("$StartDate $At") } else { [datetime]::Parse($At) }
+$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $Day -At $first
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RunOnlyIfNetworkAvailable `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -ExecutionTimeLimit (New-TimeSpan -Hours 6) -MultipleInstances IgnoreNew
