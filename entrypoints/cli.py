@@ -142,7 +142,9 @@ def weekly_scrape(
 
     apply_migrations()
     result = run_scrape(triggered_by=triggered_by, max_pages=max_pages, since_days=since_days, site=site, category=category)
-    typer.echo(f"Run {result['run_id']}: scrape={result['scrape']} load={result['load']}")
+    typer.echo(f"Run {result['run_id']} ({result['status']}): scrape={result['scrape']} load={result['load']}")
+    if result["status"] == "partial":
+        typer.echo(f"Warning: these sites refused access and were skipped: {', '.join(result['scrape']['blocked_sites'])}")
 
 
 @app.command()
