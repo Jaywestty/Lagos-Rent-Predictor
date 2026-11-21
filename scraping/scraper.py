@@ -139,6 +139,13 @@ SITE_CONFIGS = {
 # contain no listing inside the window.
 RECENT_STOP_AFTER_STALE_PAGES = 2
 
+# Give up on a category after this many search pages in a row fail to load.
+STOP_AFTER_FAILED_PAGES = 3
+# HTTP statuses that mean the site is refusing us (for example blocking cloud IPs).
+# We respect that and skip the whole site for this run instead of retrying.
+BLOCKED_STATUSES = (401, 403, 451)
+BLOCKED_AFTER_PAGES = 2
+
 # --------------------------------------------------------------------------
 # Data model
 # --------------------------------------------------------------------------
@@ -182,6 +189,7 @@ log = logging.getLogger("lagos_scraper")
 class Fetcher:
     def __init__(self):
         self.session = requests.Session()
+        self.last_status: int | None = None
 
     def get(self, url: str) -> BeautifulSoup | None:
         headers = {
@@ -191,6 +199,7 @@ class Fetcher:
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 resp = self.session.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+                self.last_status = resp.status_code
                 if resp.status_code == 200:
                     return BeautifulSoup(resp.text, "html.parser")
                 if resp.status_code in (429, 503):
@@ -512,7 +521,8 @@ def build_page_url(base_url: str, page_param: str, page_num: int, page_start: in
 # --------------------------------------------------------------------------
 
 def _new_stats() -> dict:
-    return {"discovered": 0, "kept": 0, "too_old": 0, "no_date": 0, "no_price": 0, "fetch_failed": 0}
+    return {"discovered": 0, "kept": 0, "too_old": 0, "no_date": 0, "no_price": 0, "fetch_failed": 0,
+            "pages_failed": 0, "blocked_sites": []}
 
 
 def crawl(site: str, category: str, listing_type: str, max_pages: int, inspect: bool = False,
@@ -568,6 +578,7 @@ def crawl(site: str, category: str, listing_type: str, max_pages: int, inspect: 
     total_new = 0
     inspected_count = 0
     stale_pages = 0
+    failed_pages = 0
 
     for offset in range(pages_to_run):
         page_num = start_page + offset
@@ -576,9 +587,21 @@ def crawl(site: str, category: str, listing_type: str, max_pages: int, inspect: 
 
         soup = fetcher.get(page_url)
         if soup is None:
+            failed_pages += 1
+            stats["pages_failed"] = stats.get("pages_failed", 0) + 1
+            if fetcher.last_status in BLOCKED_STATUSES and failed_pages >= BLOCKED_AFTER_PAGES:
+                log.error(f"[{site}] Site refused access (HTTP {fetcher.last_status}) on {failed_pages} pages in a row. "
+                          f"Skipping {site} for this run.")
+                if site not in stats.setdefault("blocked_sites", []):
+                    stats["blocked_sites"].append(site)
+                break
+            if failed_pages >= STOP_AFTER_FAILED_PAGES:
+                log.error(f"[{site}/{category}/{listing_type}] {failed_pages} pages in a row failed to load, stopping category.")
+                break
             log.warning(f"[{site}/{category}/{listing_type}] Skipping page {page_num} (fetch failed)")
             fetcher.polite_sleep()
             continue
+        failed_pages = 0
 
         candidate_urls = discover_listing_urls(soup, page_url, url_pattern)
         if not candidate_urls:
@@ -728,6 +751,9 @@ def main(argv: list[str] | None = None) -> dict:
 
         for category in categories:
             for listing_type in types:
+                if site in stats.get("blocked_sites", []):
+                    log.info(f"[{site}/{category}/{listing_type}] Skipped: site blocked this run.")
+                    continue
                 crawl(site, category, listing_type, args.max_pages, inspect=args.inspect,
                       since_days=args.since_days, output_csv=output_csv, stats=stats)
     log.info(f"Run summary: {stats}")
