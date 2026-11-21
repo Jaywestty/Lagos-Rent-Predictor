@@ -67,3 +67,38 @@ def test_crawl_keeps_only_recent_listings(tmp_path):
     assert len(rows) == 2  # header + one fresh listing
     assert "AAAAA" in rows[1]
     assert "sort=postedOn" in str(scraper.SITE_CONFIGS["propertypro"]["recent_sort_query"])
+
+
+class _BlockedFetcher:
+    """Every request is refused with HTTP 403, like a site blocking cloud servers."""
+
+    def __init__(self):
+        self.calls = 0
+        self.last_status = None
+
+    def get(self, url):
+        self.calls += 1
+        self.last_status = 403
+        return None
+
+    @staticmethod
+    def polite_sleep():
+        pass
+
+
+def test_blocked_site_is_skipped_after_two_pages(tmp_path):
+    fake = _BlockedFetcher()
+    with patch.object(scraper, "Fetcher", return_value=fake):
+        stats = scraper.main(["--site", "npc", "--category", "all", "--type", "rent", "--max-pages", "30",
+                              "--since-days", "7", "--output", str(tmp_path / "run.csv")])
+    assert stats["blocked_sites"] == ["npc"]
+    assert fake.calls == scraper.BLOCKED_AFTER_PAGES  # second category never fetched
+    assert stats["kept"] == 0
+
+
+def test_run_status_reflects_blocked_sites():
+    from scraping.runner import run_status
+
+    assert run_status({"blocked_sites": [], "kept": 0}) == "success"
+    assert run_status({"blocked_sites": ["npc"], "kept": 40}) == "partial"
+    assert run_status({"blocked_sites": ["npc", "propertypro"], "kept": 0}) == "failed"
