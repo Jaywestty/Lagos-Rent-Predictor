@@ -48,6 +48,20 @@ jobs:
           --max-pages "${{ inputs.max_pages || '30' }}"
           --triggered-by "github-actions:${{ github.event_name }}"
 
+      - name: Pre-build area guides for the top areas
+        # Optional: needs GROQ_API_KEY and TAVILY_API_KEY secrets. A failure here never fails the scrape.
+        continue-on-error: true
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL || 'openai/gpt-oss-120b' }}
+        run: |
+          if [ -z "$GROQ_API_KEY" ] || [ -z "$TAVILY_API_KEY" ]; then
+            echo "GROQ_API_KEY or TAVILY_API_KEY secret not set, skipping guides."
+            exit 0
+          fi
+          uv run python -m entrypoints.cli warm-guides --top 15
+
       - name: Upload run CSV and quality report
         if: always()
         uses: actions/upload-artifact@v4
