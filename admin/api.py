@@ -10,7 +10,7 @@ from sqlalchemy import text
 from admin.auth import SESSION_COOKIE, create_admin, get_current_admin, login, logout, require_csrf
 from db import get_engine
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 _scrape_lock = threading.Lock()
 _last_scrape_at: float = 0.0
@@ -57,15 +57,16 @@ def _filter_sql(params: dict, base_where: str) -> tuple[dict[str, object], str]:
 @router.post("/auth/login")
 def auth_login(body: LoginIn, response: Response):
     sid, csrf = login(body.email, body.password)
-    response.set_cookie(SESSION_COOKIE, sid, httponly=True, secure=True, samesite="lax", path="/admin", max_age=12 * 3600)
+    response.set_cookie(SESSION_COOKIE, sid, httponly=True, secure=True, samesite="lax", path="/api/admin", max_age=12 * 3600)
     return {"ok": True, "csrf_token": csrf}
 
 
 @router.post("/auth/logout")
-def auth_logout(request: Request, admin_session: str | None = Cookie(default=None)):
+def auth_logout(request: Request, response: Response, admin_session: str | None = Cookie(default=None)):
     sess = get_current_admin(request, admin_session)
     require_csrf(request, sess)
     logout(admin_session)
+    response.delete_cookie(SESSION_COOKIE, path="/api/admin")
     return {"ok": True}
 
 
@@ -152,7 +153,7 @@ def scraper_runs(request: Request, page: int = 1, page_size: int = 20, admin_ses
     engine = get_engine()
     with engine.connect() as conn:
         rows = conn.execute(
-            text("SELECT id, triggered_by, started_at, completed_at, status, listings_discovered, listings_added, listings_updated, duplicates_skipped, validation_failures, error_count, log_excerpt FROM scraper_runs ORDER BY started_at DESC LIMIT :lim OFFSET :off"),
+            text("SELECT id, triggered_by, started_at, completed_at, status, listings_discovered, listings_added, listings_updated, duplicates_skipped, validation_failures, listings_too_old, since_days, error_count, log_excerpt FROM scraper_runs ORDER BY started_at DESC LIMIT :lim OFFSET :off"),
             {"lim": page_size, "off": (page - 1) * page_size},
         ).mappings().all()
         total = conn.execute(text("SELECT COUNT(*) FROM scraper_runs")).scalar() or 0
@@ -204,7 +205,8 @@ def review_queue(request: Request, status: str | None = None, page: int = 1, pag
 def _run_scrape_job(job_id: int, triggered_by: str) -> None:
     try:
         from scraping.runner import run_scrape
-        run_scrape(triggered_by=triggered_by, max_pages=5)
+        _run_state[str(job_id)] = {"state": "running"}
+        run_scrape(triggered_by=triggered_by, run_id=job_id)
     except Exception as exc:
         logger.error("admin scrape failed: {}", exc)
         _run_state[str(job_id)] = {"state": "failed", "error": str(exc)[:500]}
@@ -244,7 +246,7 @@ def scrape_status(job_id: int, request: Request, admin_session: str | None = Coo
     get_current_admin(request, admin_session)
     engine = get_engine()
     with engine.connect() as conn:
-        row = conn.execute(text("SELECT id, triggered_by, started_at, completed_at, status, listings_discovered, listings_added, listings_updated, duplicates_skipped, validation_failures, error_count, log_excerpt FROM scraper_runs WHERE id = :id"), {"id": job_id}).mappings().first()
+        row = conn.execute(text("SELECT id, triggered_by, started_at, completed_at, status, listings_discovered, listings_added, listings_updated, duplicates_skipped, validation_failures, listings_too_old, since_days, error_count, log_excerpt FROM scraper_runs WHERE id = :id"), {"id": job_id}).mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail="Job not found")
     state = _run_state.get(str(job_id), {}).get("state", dict(row).get("status"))
