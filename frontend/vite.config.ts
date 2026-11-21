@@ -32,7 +32,6 @@ export default defineConfig({
     proxy: {
       '/api': { target: process.env.VITE_API_BASE_URL || 'http://localhost:8000', changeOrigin: true },
       '/query': { target: process.env.VITE_API_BASE_URL || 'http://localhost:8000', changeOrigin: true },
-      '/admin': { target: process.env.VITE_API_BASE_URL || 'http://localhost:8000', changeOrigin: true },
     },
   },
   build: { rollupOptions: { output: {} } },
