@@ -40,3 +40,38 @@ body { background: var(--bg); color: var(--text); font-family: Inter, system-ui,
 .pulse { animation: pulse 1.2s ease-in-out infinite; }
 @keyframes rise { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
 .rise { animation: rise 180ms ease-out both; }
+
+/* Chart tokens. Compare uses the first three validated categorical slots. */
+:root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --grid: #e6ebe7; --good: #1f7a4d; }
+.dark { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --grid: #2a3830; --good: #75c69c; }
+
+/* Motion: short, eased, one entrance per element. All of it is off under prefers-reduced-motion (above). */
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+.fade-in { animation: fadeIn 220ms ease-out both; }
+.stagger > * { animation: rise 260ms cubic-bezier(.2,.7,.2,1) both; }
+.stagger > *:nth-child(2) { animation-delay: 40ms } .stagger > *:nth-child(3) { animation-delay: 80ms }
+.stagger > *:nth-child(4) { animation-delay: 120ms } .stagger > *:nth-child(5) { animation-delay: 160ms }
+.stagger > *:nth-child(6) { animation-delay: 200ms } .stagger > *:nth-child(n+7) { animation-delay: 240ms }
+@keyframes growX { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+.grow-x { transform-origin: left center; animation: growX 520ms cubic-bezier(.2,.7,.2,1) both; }
+@keyframes draw { from { stroke-dashoffset: var(--len, 1000) } to { stroke-dashoffset: 0 } }
+.draw { stroke-dasharray: var(--len, 1000); animation: draw 700ms ease-out both; }
+@keyframes pop { 0% { transform: scale(1) } 40% { transform: scale(1.25) } 100% { transform: scale(1) } }
+.pop { animation: pop 260ms ease-out; }
+@keyframes shimmer { from { background-position: -200% 0 } to { background-position: 200% 0 } }
+.skeleton { border-radius: 8px; background: linear-gradient(90deg, var(--soft) 25%, var(--elevated) 50%, var(--soft) 75%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+.lift { transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease; }
+.lift:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(16, 23, 19, .08); border-color: var(--primary); }
+.chip { min-height: 40px; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 0 14px; font-size: 13px; font-weight: 600; transition: background 140ms ease, border-color 140ms ease, color 140ms ease; }
+.chip:hover { border-color: var(--primary); }
+.chip[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: #fff; }
+.dark .chip[aria-pressed="true"] { color: #101713; }
+.btn { min-height: 44px; border-radius: 10px; padding: 0 16px; font-size: 14px; font-weight: 600; background: var(--primary); color: #fff; transition: filter 140ms ease, transform 140ms ease; }
+.dark .btn { color: #101713; }
+.btn:hover { filter: brightness(1.06); } .btn:active { transform: scale(.98); }
+.btn-ghost { min-height: 44px; border-radius: 10px; padding: 0 14px; font-size: 14px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); transition: border-color 140ms ease; }
+.btn-ghost:hover { border-color: var(--primary); }
+.muted { color: var(--secondary); }
+.badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; background: var(--soft); }
+.input { min-height: 44px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 10px; padding: 0 12px; font-size: 15px; }
+.tooltip { position: absolute; pointer-events: none; background: var(--elevated); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; z-index: 5; }
