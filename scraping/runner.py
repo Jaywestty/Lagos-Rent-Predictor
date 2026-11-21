@@ -36,6 +36,9 @@ def run_scrape(triggered_by: str = "schedule", max_pages: int = DEFAULT_MAX_PAGE
             "--max-pages", str(max_pages), "--since-days", str(since_days), "--output", str(csv_path),
         ])
         loaded = load_csv_to_db(str(csv_path), report_out=str(RUNS_DIR / f"run_{run_id}_quality.json"))
+        from query.market import write_snapshots
+
+        loaded["snapshots"] = write_snapshots()
         excerpt = (
             f"window={since_days}d max_pages={max_pages} site={site} category={category}\n"
             f"scrape={stats}\nload={loaded}\ncsv={csv_path}"
@@ -57,5 +60,9 @@ def run_scrape(triggered_by: str = "schedule", max_pages: int = DEFAULT_MAX_PAGE
         return {"run_id": run_id, "scrape": stats, "load": loaded, "csv": str(csv_path)}
     except Exception as exc:
         logger.exception("scrape run {} failed", run_id)
+        from observability.events import drain, record_error
+
+        record_error("scraper", exc)
+        drain()
         update_scraper_run(run_id, completed=True, status="failed", error_count=1, log_excerpt=repr(exc))
         raise
