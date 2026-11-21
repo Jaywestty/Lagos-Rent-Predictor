@@ -1,6 +1,5 @@
 import json
 import os
-
 from enum import Enum
 from typing import Optional
 
@@ -10,6 +9,7 @@ from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from config import GROQ_MODEL
+from observability.events import groq_chat
 from observability.tracer import record_call
 
 load_dotenv()
@@ -115,42 +115,42 @@ Additional disambiguation rules:
 """
 
 
-class QueryType(str, Enum):
+class QueryType(str, Enum):  # noqa: UP042  (str() of members is relied on)
     LOOKUP = "lookup"
     AFFORDABILITY = "affordability"
     COMPARISON = "comparison"
     ADVICE = "advice"
 
 
-class ListingType(str, Enum):
+class ListingType(str, Enum):  # noqa: UP042  (str() of members is relied on)
     RENT = "rent"
     SALE = "sale"
 
 
 class ComparisonOption(BaseModel):
     label: str
-    beds: Optional[int] = Field(default=None, ge=0)
-    area: Optional[str] = Field(default=None)
-    property_type: Optional[str] = Field(default=None)
-    listing_type: Optional[ListingType] = Field(default=None)
+    beds: int | None = Field(default=None, ge=0)
+    area: str | None = Field(default=None)
+    property_type: str | None = Field(default=None)
+    listing_type: ListingType | None = Field(default=None)
 
 
-class BudgetPeriod(str, Enum):
+class BudgetPeriod(str, Enum):  # noqa: UP042  (str() of members is relied on)
     YEAR = "year"
     MONTH = "month"
 
 
 class PropertyEntities(BaseModel):
     query_type: QueryType
-    beds: Optional[int] = Field(default=None, ge=0)
-    area: Optional[str] = Field(default=None)
-    budget_ngn: Optional[float] = Field(default=None, ge=0)
+    beds: int | None = Field(default=None, ge=0)
+    area: str | None = Field(default=None)
+    budget_ngn: float | None = Field(default=None, ge=0)
     budget_period: BudgetPeriod = Field(default=BudgetPeriod.YEAR)
     budget_period_was_explicit: bool = Field(default=False)
-    property_type: Optional[str] = Field(default=None)
-    listing_type: Optional[ListingType] = Field(default=None)
-    comparison_options: Optional[list[ComparisonOption]] = Field(default=None)
-    resolved_query: Optional[str] = Field(default=None)
+    property_type: str | None = Field(default=None)
+    listing_type: ListingType | None = Field(default=None)
+    comparison_options: list[ComparisonOption] | None = Field(default=None)
+    resolved_query: str | None = Field(default=None)
 
     @model_validator(mode="after")
     def _validate_comparison_options(self):
@@ -174,7 +174,7 @@ def _get_client() -> Groq:
     return Groq(api_key=api_key)
 
 
-def _build_follow_up_context(previous: Optional["PropertyEntities"]) -> Optional[str]:
+def _build_follow_up_context(previous: Optional["PropertyEntities"]) -> str | None:
     if previous is None:
         return None
     return (
@@ -186,8 +186,8 @@ def _build_follow_up_context(previous: Optional["PropertyEntities"]) -> Optional
 def _call_groq(
     client: Groq,
     user_query: str,
-    retry_hint: Optional[str] = None,
-    follow_up_context: Optional[str] = None,
+    retry_hint: str | None = None,
+    follow_up_context: str | None = None,
 ) -> str:
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     if follow_up_context:
@@ -197,7 +197,9 @@ def _call_groq(
     messages.append({"role": "user", "content": user_query})
 
     record_call("groq")
-    response = client.chat.completions.create(
+    response = groq_chat(
+        client,
+        "extraction",
         model=GROQ_MODEL,
         messages=messages,
         response_format={"type": "json_object"},
@@ -208,7 +210,7 @@ def _call_groq(
 
 def extract_entities(
     user_query: str,
-    previous_entities: Optional[PropertyEntities] = None,
+    previous_entities: PropertyEntities | None = None,
 ) -> PropertyEntities:
     if not user_query or not user_query.strip():
         raise EntityExtractionError("query text is empty")
@@ -216,7 +218,7 @@ def extract_entities(
     client = _get_client()
     follow_up_context = _build_follow_up_context(previous_entities)
     retry_hint = None
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
 
     for attempt in range(1, MAX_EXTRACTION_ATTEMPTS + 1):
         try:
