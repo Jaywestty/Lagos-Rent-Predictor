@@ -66,7 +66,8 @@ def test_crawl_keeps_only_recent_listings(tmp_path):
     rows = out.read_text(encoding="utf-8").splitlines()
     assert len(rows) == 2  # header + one fresh listing
     assert "AAAAA" in rows[1]
-    assert "sort=postedOn" in str(scraper.SITE_CONFIGS["propertypro"]["recent_sort_query"])
+    # robots.txt compliance: never request sort/order URLs on PropertyPro.
+    assert "recent_sort_query" not in scraper.SITE_CONFIGS["propertypro"]
 
 
 class _BlockedFetcher:
