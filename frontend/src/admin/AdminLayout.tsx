@@ -7,7 +7,7 @@ export function AdminLayout() {
   const [ok, setOk] = useState(false);
   const navigate = useNavigate();
   useEffect(() => {
-    fetch(`${BASE}/admin/auth/me`, { credentials: "include" }).then((r) => {
+    fetch(`${BASE}/api/admin/auth/me`, { credentials: "include" }).then((r) => {
       if (!r.ok) navigate("/admin/login", { replace: true });
       else setOk(true);
     }).catch(() => navigate("/admin/login", { replace: true }));
