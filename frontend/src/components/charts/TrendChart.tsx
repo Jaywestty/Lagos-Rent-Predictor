@@ -28,7 +28,7 @@ export function TrendChart({ series, title }: { series: Series[]; title: string 
         <p className="font-semibold">{title}</p>
         <p className="muted mt-1">
           The trend line starts once there are two weeks of data. The weekly scrape adds a point every Monday.
-          {only?.median_ngn != null && <> This week&apos;s median: <strong className="tabular" style={{ color: "var(--text)" }}>{nairaShort(only.median_ngn)}</strong> from {only.listing_count} listings.</>}
+          {only?.median_ngn != null && <> This week&apos;s typical rent: <strong className="tabular" style={{ color: "var(--text)" }}>{nairaShort(only.median_ngn)}</strong> from {only.listing_count} listings.</>}
         </p>
       </div>
     );
@@ -55,7 +55,7 @@ export function TrendChart({ series, title }: { series: Series[]; title: string 
           <span key={s.name} className="muted inline-flex items-center gap-1 text-[12px]"><span className="inline-block h-[2px] w-4 rounded" style={{ background: s.color }} />{s.name}</span>
         ))}
       </figcaption>
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={`${title}, weekly median`}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label={`${title}, typical rent each week`}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} stroke="var(--grid)" strokeWidth={1} />
@@ -89,7 +89,7 @@ export function TrendChart({ series, title }: { series: Series[]; title: string 
               <div key={s.name} className="flex items-center gap-2">
                 <span className="inline-block h-[2px] w-3 rounded" style={{ background: s.color }} />
                 <strong className="tabular">{nairaShort(p?.median_ngn)}</strong>
-                <span className="muted">{series.length > 1 ? s.name : "median"} · {p?.listing_count ?? 0} listings</span>
+                <span className="muted">{series.length > 1 ? s.name : "typical rent"} · {p?.listing_count ?? 0} listings</span>
               </div>
             );
           })}
