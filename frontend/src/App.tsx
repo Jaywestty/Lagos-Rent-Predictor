@@ -4,10 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Header } from "./components/layout/Header";
 import { Chat } from "./components/chat/Chat";
 import { useTheme } from "./hooks/useTheme";
-import { AdminLogin } from "./admin/AdminLogin";
-import { AdminLayout } from "./admin/AdminLayout";
 import { Skeleton } from "./components/states/States";
 
+// Admin code is split out so public visitors never download it. Access needs an account made with the CLI.
+const AdminLogin = lazy(() => import("./admin/AdminLogin").then((m) => ({ default: m.AdminLogin })));
+const AdminLayout = lazy(() => import("./admin/AdminLayout").then((m) => ({ default: m.AdminLayout })));
 const Analytics = lazy(() => import("./admin/Analytics").then((m) => ({ default: m.Analytics })));
 const Operations = lazy(() => import("./admin/Operations").then((m) => ({ default: m.Operations })));
 const Observability = lazy(() => import("./admin/Observability").then((m) => ({ default: m.Observability })));
@@ -47,8 +48,8 @@ export default function App() {
             <Route path="/move-in" element={<Page><MoveIn /></Page>} />
             <Route path="/saved" element={<Page><Saved /></Page>} />
           </Route>
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin" element={<AdminLayout />}>
+          <Route path="/admin/login" element={<Page><AdminLogin /></Page>} />
+          <Route path="/admin" element={<Page><AdminLayout /></Page>}>
             <Route index element={<Page><Analytics /></Page>} />
             <Route path="observability" element={<Page><Observability /></Page>} />
             <Route path="operations" element={<Page><Operations /></Page>} />
