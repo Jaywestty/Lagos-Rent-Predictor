@@ -30,7 +30,6 @@ export function Header({ theme, onToggle }: { theme: string; onToggle: () => voi
           ))}
         </nav>
         <div className="flex items-center gap-1">
-          <a href="/admin" className="muted hidden min-h-[44px] content-center px-2 text-[13px] font-semibold md:block">Admin</a>
           <button type="button" onClick={onToggle} aria-label="Toggle theme" className="btn-ghost min-w-[44px] px-2">{theme === "light" ? "Dark" : "Light"}</button>
           <button type="button" className="btn-ghost md:hidden" aria-expanded={open} aria-controls="mobile-nav" onClick={() => setOpen((o) => !o)}>Menu</button>
         </div>
@@ -38,7 +37,6 @@ export function Header({ theme, onToggle }: { theme: string; onToggle: () => voi
       {open && (
         <nav id="mobile-nav" aria-label="Main mobile" className="fade-in border-t px-4 pb-3 md:hidden" style={{ borderColor: "var(--border)" }}>
           {LINKS.map((l) => <NavLink key={l.to} to={l.to} end={l.end} className={({ isActive }) => `block ${linkClass({ isActive })}`} onClick={() => setOpen(false)}>{l.label}</NavLink>)}
-          <a href="/admin" className="muted block min-h-[44px] content-center px-3 text-[14px] font-semibold">Admin</a>
         </nav>
       )}
     </header>
