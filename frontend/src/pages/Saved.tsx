@@ -32,7 +32,7 @@ export function Saved() {
                 <div className="min-w-0">
                   <h3 className="text-[15px] font-semibold">{s.label}</h3>
                   {s.current ? (
-                    <p className="mt-1 text-[14px]"><strong className="tabular">{nairaShort(s.current.median_ngn)}</strong> <span className="muted">median now · {s.current.listing_count} listings · newest {timeAgo(s.current.data_as_of)}</span></p>
+                    <p className="mt-1 text-[14px]"><strong className="tabular">{nairaShort(s.current.median_ngn)}</strong> <span className="muted">typical rent now · {s.current.listing_count} listings · newest {timeAgo(s.current.data_as_of)}</span></p>
                   ) : <p className="muted mt-1 text-[13px]">Saved {timeAgo(s.created_at)}</p>}
                   <div className="mt-2 flex flex-wrap gap-3 text-[13px] font-semibold" style={{ color: "var(--primary)" }}>
                     {s.query && <Link to={`/?q=${encodeURIComponent(s.query)}`} className="hover:underline">Ask again</Link>}
