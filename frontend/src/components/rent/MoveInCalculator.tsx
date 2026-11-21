@@ -52,7 +52,7 @@ export function MoveInCalculator({ initialRent, area }: { initialRent?: number |
   return (
     <div className="grid gap-6 md:grid-cols-[1fr_1.1fr]">
       <div className="space-y-3">
-        <NumberField label="Yearly rent" value={rent} onChange={(v) => { setRent(v); touched(); }} suffix="NGN" step={50_000} hint={initialRent ? `Prefilled with the ${area ?? "area"} median from listings.` : undefined} />
+        <NumberField label="Yearly rent" value={rent} onChange={(v) => { setRent(v); touched(); }} suffix="NGN" step={50_000} hint={initialRent ? `Filled in with the typical rent in ${area ?? "this area"}, from real listings.` : undefined} />
         <div>
           <p className="text-[13px] font-semibold">Years paid upfront</p>
           <div className="mt-1 flex gap-2">
