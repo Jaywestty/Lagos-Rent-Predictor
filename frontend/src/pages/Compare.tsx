@@ -69,7 +69,7 @@ export function Compare() {
         {cmp.isError && <PageError message="The comparison did not load. Try again in a moment." />}
         {data && (
           <div className={cmp.isFetching ? "opacity-60 transition-opacity" : "transition-opacity"}>
-            {cheapest && <p className="fade-in mb-4 text-[15px]">For <strong>{data.label.toLowerCase()}</strong>, <strong>{cheapest.area}</strong> has the lowest median at <strong className="tabular">{nairaShort(cheapest.focus?.median)}</strong> a year.</p>}
+            {cheapest && <p className="fade-in mb-4 text-[15px]">For <strong>{data.label.toLowerCase()}</strong>, <strong>{cheapest.area}</strong> has the lowest typical rent at <strong className="tabular">{nairaShort(cheapest.focus?.median)}</strong> a year.</p>}
             <div className="stagger grid gap-3 md:grid-cols-3">
               {data.areas.map((a) => (
                 <article key={a.area} className="card p-4" style={{ borderTop: `3px solid ${colorOf(a.area)}` }}>
@@ -78,7 +78,7 @@ export function Compare() {
                     <Link to={`/areas/${encodeURIComponent(a.area)}`} className="text-[12px] font-semibold hover:underline" style={{ color: "var(--primary)" }}>Guide →</Link>
                   </div>
                   <p className="tabular mt-2 text-[30px] font-bold leading-none">{nairaShort(a.focus?.median)}</p>
-                  <p className="muted text-[12px]">median · {a.focus?.count ?? 0} listings · newest {timeAgo(a.data_as_of)}</p>
+                  <p className="muted text-[12px]">typical rent a year · {a.focus?.count ?? 0} listings · newest {timeAgo(a.data_as_of)}</p>
                   <div className="mt-2"><ConfidenceBadge confidence={confidenceFor(a.focus?.count ?? 0)} /></div>
                   {a.trend.change_pct != null && <p className="mt-2 text-[13px] tabular">{a.trend.change_pct > 0 ? "▲" : "▼"} {Math.abs(a.trend.change_pct)}% since first week</p>}
                 </article>
@@ -91,11 +91,11 @@ export function Compare() {
             </section>
 
             <section className="card mt-4 p-4 md:p-6">
-              <TrendChart title={`Weekly median · ${data.label}`} series={data.areas.map((a) => ({ name: a.area, color: colorOf(a.area), trend: a.trend }))} />
+              <TrendChart title={`Typical rent week by week · ${data.label}`} series={data.areas.map((a) => ({ name: a.area, color: colorOf(a.area), trend: a.trend }))} />
             </section>
 
             <section className="card mt-4 overflow-x-auto p-4 md:p-6" aria-label="Comparison table">
-              <h2 className="text-[17px] font-semibold">Median by size</h2>
+              <h2 className="text-[17px] font-semibold">Typical rent by size</h2>
               <table className="mt-3 w-full min-w-[480px] text-[14px]">
                 <thead><tr className="muted text-left text-[12px]"><th className="py-2">Size</th>{data.areas.map((a) => <th key={a.area} className="py-2 text-right">{a.area}</th>)}</tr></thead>
                 <tbody>
