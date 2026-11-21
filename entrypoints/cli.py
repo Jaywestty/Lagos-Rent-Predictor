@@ -129,6 +129,23 @@ def migrate():
 
 
 @app.command()
+def weekly_scrape(
+    since_days: int = typer.Option(7, help="Only keep listings from the last N days."),
+    max_pages: int = typer.Option(30, help="Upper bound on pages per site/category."),
+    site: str = typer.Option("all", help="npc, propertypro or all."),
+    category: str = typer.Option("all", help="One category or all."),
+    triggered_by: str = typer.Option("cli", help="Recorded in scraper_runs.triggered_by."),
+):
+    """Migrate, scrape recent rent listings, and load them into the database."""
+    from analytics_logging import apply_migrations
+    from scraping.runner import run_scrape
+
+    apply_migrations()
+    result = run_scrape(triggered_by=triggered_by, max_pages=max_pages, since_days=since_days, site=site, category=category)
+    typer.echo(f"Run {result['run_id']}: scrape={result['scrape']} load={result['load']}")
+
+
+@app.command()
 def create_admin():
     import os
 
