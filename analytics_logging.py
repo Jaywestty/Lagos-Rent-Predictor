@@ -6,13 +6,16 @@ from sqlalchemy import text
 
 from db import get_engine
 
-MIGRATIONS_DIR = Path("sql/migrations")
+SQL_DIR = Path(__file__).resolve().parent / "sql"
+SCHEMA_PATH = SQL_DIR / "schema.sql"
+MIGRATIONS_DIR = SQL_DIR / "migrations"
 
 
 def apply_migrations(engine=None) -> list[str]:
+    """Apply the base schema then every numbered migration. All files are idempotent."""
     eng = engine or get_engine()
     applied = []
-    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+    for path in [SCHEMA_PATH, *sorted(MIGRATIONS_DIR.glob("*.sql"))]:
         sql = path.read_text(encoding="utf-8")
         with eng.begin() as conn:
             conn.execute(text(sql))
@@ -46,6 +49,29 @@ def log_question(request_id, session_id=None, raw_question="", parsed_location=N
             },
         ).mappings().first()
     return int(row["id"]) if row else 0
+
+
+_RUN_UPDATABLE = {
+    "status", "listings_discovered", "listings_added", "listings_updated", "duplicates_skipped",
+    "validation_failures", "error_count", "log_excerpt", "listings_too_old", "since_days",
+}
+
+
+def update_scraper_run(run_id: int, completed: bool = False, **fields) -> None:
+    """Update one scraper_runs row in place, so each run keeps a single row."""
+    unknown = set(fields) - _RUN_UPDATABLE
+    if unknown:
+        raise ValueError(f"Unknown scraper_runs fields: {sorted(unknown)}")
+    if "log_excerpt" in fields:
+        fields["log_excerpt"] = (fields["log_excerpt"] or "")[:8000]
+    sets = [f"{k} = :{k}" for k in fields]
+    if completed:
+        sets.append("completed_at = now()")
+    if not sets:
+        return
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(text(f"UPDATE scraper_runs SET {', '.join(sets)} WHERE id = :run_id"), {**fields, "run_id": run_id})
 
 
 def record_scraper_run(triggered_by="schedule", status="queued", discovered=0, added=0, updated=0, duplicates_skipped=0, validation_failures=0, error_count=0, log_excerpt="", completed=False) -> int:
