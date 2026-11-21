@@ -10,7 +10,7 @@ export function AdminLogin() {
   const navigate = useNavigate();
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const res = await fetch(`${BASE}/admin/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }), credentials: "include" });
+    const res = await fetch(`${BASE}/api/admin/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }), credentials: "include" });
     if (!res.ok) { setError("Invalid email or password"); return; }
     const body = await res.json();
     localStorage.setItem("admin-csrf", body.csrf_token || "");
