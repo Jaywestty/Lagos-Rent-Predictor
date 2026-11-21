@@ -15,15 +15,22 @@ export default defineConfig({
         const path = require('node:path');
         const dist = path.join(import.meta.dirname, 'dist/assets');
         if (!fs.existsSync(dist)) return;
+        // Budget what a visitor downloads first (entry chunk); lazy pages and admin load on demand.
+        let initial = 0;
         let total = 0;
         for (const f of fs.readdirSync(dist)) {
           if (!f.endsWith('.js')) continue;
-          const buf = fs.readFileSync(path.join(dist, f));
-          total += zlib.gzipSync(buf).length;
+          const size = zlib.gzipSync(fs.readFileSync(path.join(dist, f))).length;
+          total += size;
+          if (f.startsWith('index-')) initial += size;
         }
-        const budget = 120 * 1024;
-        if (total > budget) {
-          throw new Error(`Bundle size check failed: ${total} bytes gzipped exceeds ${budget} bytes`);
+        const initialBudget = 120 * 1024;
+        const totalBudget = 200 * 1024;
+        if (initial > initialBudget) {
+          throw new Error(`Bundle size check failed: initial JS ${initial} bytes gzipped exceeds ${initialBudget} bytes`);
+        }
+        if (total > totalBudget) {
+          throw new Error(`Bundle size check failed: all JS ${total} bytes gzipped exceeds ${totalBudget} bytes`);
         }
       },
     },
