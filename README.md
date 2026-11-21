@@ -40,24 +40,24 @@ flowchart LR
 - eval/ : golden extraction cases and advice evaluation scripts
 - data/ : scraper output and known area files (local, gitignored)
 - docs/ : orientation.md, cleanup.md and later handoff notes
-- frontend/ : planned React app in Phase 5, not present yet
+- frontend/ : Vite React app with public chat and admin UI
+- .github/workflows/ : weekly scrape and load job
 
 ## Prerequisites
 
 - uv that can install Python 3.12
 - Python 3.12 (see .python-version)
 - Node LTS (needed for Phase 5 frontend)
-- PostgreSQL 16 (or local Postgres on port 5432)
-- Docker for docker-compose.yml
+- A hosted Postgres database (the project uses Supabase). docker-compose.yml is kept only as an optional local fallback.
 
 ## Setup
 
 ```powershell
 Copy-Item .env.example .env
-# Edit .env and set POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB,
-# POSTGRES_HOST, POSTGRES_PORT, GROQ_API_KEY, TAVILY_API_KEY, GROQ_MODEL.
-docker compose up -d postgres
+# Edit .env: set DATABASE_URL to the Supabase Session pooler URI
+# (Supabase > Connect > Session pooler), plus GROQ_API_KEY, TAVILY_API_KEY, GROQ_MODEL.
 uv sync
+uv run python -m entrypoints.cli migrate
 ```
 
 ## Environment variables
@@ -66,6 +66,7 @@ Built from config.py, db.py and .env.example:
 
 | Variable | Required | Default | Used for |
 | --- | --- | --- | --- |
+| DATABASE_URL | yes for hosted DB | none | Full Postgres URI (Supabase). Wins over POSTGRES_* when set. TLS is required automatically for non-local hosts |
 | POSTGRES_USER | no | lagos_rent | Postgres user |
 | POSTGRES_PASSWORD | no | lagos_rent | Postgres password |
 | POSTGRES_DB | no | lagos_rent | Postgres database |
@@ -97,6 +98,14 @@ Scraper (writes data/raw/lagos_properties.csv):
 
 ```powershell
 uv run python scraping/scraper.py --site npc --category houses --type rent --max-pages 5
+```
+
+Weekly scrape and load (what the scheduler runs). Migrates, scrapes only rent listings
+from the last 7 days, newest pages first, then loads them into the database and records
+one scraper_runs row:
+
+```powershell
+uv run python -m entrypoints.cli weekly-scrape --since-days 7 --max-pages 30
 ```
 
 Pipeline load (applies sql/schema.sql and upserts listings):
@@ -209,7 +218,7 @@ Advice (general renting questions):
 
 POST /api/chat and POST /api/chat/stream return a typed versioned answer with status (success, low_data, no_data, clarification, out_of_scope, error), headline, 4 property breakdowns, median, listing count, range method (percentile for 10 plus or min_max), data as of, confidence, follow ups, request id and latency. POST /api/chat/stream sends SSE events status, delta, final and error. Both support X-Request-Key idempotency and a request timeout. POST /query keeps legacy keys and also adds answer.
 
-Admin routes under /admin implement login, logout, me, analytics overview with six KPIs, questions over time, top areas, recent questions, scraper runs, freshness, review queue, manual scrape with polling and logs, and PATCH review. All require a session cookie and CSRF token for state changes.
+Admin routes under /api/admin implement login, logout, me, analytics overview with six KPIs, questions over time, top areas, recent questions, scraper runs, freshness, review queue, manual scrape with polling and logs, and PATCH review. All require a session cookie and CSRF token for state changes.
 
 ## Data rules
 
@@ -222,7 +231,9 @@ Admin routes under /admin implement login, logout, me, analytics overview with s
 
 ## Roadmap
 
-- Next milestone is hosted database and CI/CD scraping. The callable scraper function seam, scraper_runs table and environment variables will make that possible. That work is described in docs/next-steps.md after Phase 6.
+- Weekly scheduler: .github/workflows/weekly-scrape.yml runs every Monday 01:00 UTC (02:00 Lagos) and can be started by hand from the Actions tab. It needs a DATABASE_URL repository secret, and GitHub only runs scheduled workflows from the default branch, so it starts once this work is merged into main.
+- Recency: in weekly mode the scraper keeps a listing only if its source date is inside the window. NigeriaPropertyCentre uses the posted date (JSON-LD datePosted); PropertyPro uses its "Last updated" date. The date is stored in listings.listed_at.
+- Hosted database (Supabase) and the weekly CI scrape are now in place. Remaining from docs/next-steps.md: alerting on failed runs and deploying the API and frontend.
 - Phase 4A adds the typed answer contract with percentile ranges and confidence.
 - Phase 4B adds analytics logging and migrations.
 - Phase 4C adds the admin API.
