@@ -3,14 +3,13 @@ import time
 import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Optional
 
 from loguru import logger
 from sqlalchemy import text
 
 from db import get_engine
 
-_current_trace_id: ContextVar[Optional[str]] = ContextVar("current_trace_id", default=None)
+_current_trace_id: ContextVar[str | None] = ContextVar("current_trace_id", default=None)
 _call_counts: ContextVar[dict] = ContextVar("call_counts", default=None)
 
 
@@ -19,13 +18,16 @@ def new_trace_id() -> str:
 
 
 def start_trace() -> str:
-    trace_id = new_trace_id()
+    # Reuse the HTTP request id when there is one, so traces join api_requests and llm_calls.
+    from observability.events import current_request_id
+
+    trace_id = current_request_id.get() or new_trace_id()
     _current_trace_id.set(trace_id)
     _call_counts.set({})
     return trace_id
 
 
-def get_current_trace_id() -> Optional[str]:
+def get_current_trace_id() -> str | None:
     return _current_trace_id.get()
 
 
@@ -65,7 +67,7 @@ def _save_stage_trace(trace_id, stage, query_type, duration_ms, call_counts, suc
 
 
 @contextmanager
-def trace_stage(stage: str, query_type: Optional[str] = None):
+def trace_stage(stage: str, query_type: str | None = None):
     trace_id = _current_trace_id.get()
     counts_before = dict(_call_counts.get() or {})
     start = time.perf_counter()

@@ -1,18 +1,13 @@
 import argparse
 import json
-import os
 from pathlib import Path
 
-from numpy.ma import anomalies
 import pandas as pd
-from dotenv import load_dotenv
 from rapidfuzz import fuzz
-from sqlalchemy import text
+from sqlalchemy import MetaData, Table, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy import Table, MetaData
 
 from db import get_engine
-
 from scraping.location_normalizer import normalize_location
 
 DEDUP_SUBAREA_SIMILARITY_THRESHOLD = 85
@@ -29,7 +24,7 @@ RENT_ANNUAL_SANITY_FLOOR_NGN = 300_000
 
 
 def apply_schema(engine, schema_path):
-    with open(schema_path, "r", encoding="utf-8") as f:
+    with open(schema_path, encoding="utf-8") as f:
         schema_sql = f.read()
     with engine.begin() as conn:
         conn.execute(text(schema_sql))
@@ -44,6 +39,8 @@ def load_csv(csv_path):
 
     df["price_ngn"] = pd.to_numeric(df["price_ngn"], errors="coerce")
     df["scraped_at"] = pd.to_datetime(df["scraped_at"], errors="coerce", utc=True)
+    if "listed_at" in df.columns:
+        df["listed_at"] = pd.to_datetime(df["listed_at"], errors="coerce", utc=True)
     df["price_period"] = df["price_period"].where(df["price_period"].notna(), None)
 
     return df
@@ -158,7 +155,8 @@ def upsert_listings(df, engine):
     listings_table = Table("listings", metadata, autoload_with=engine)
 
     records = df.drop(columns=["_location_needs_review", "is_duplicate_of_row"], errors="ignore")
-    records = records.where(pd.notna(records), None)
+    # object dtype first so NaT / pd.NA become real None for psycopg2.
+    records = records.astype(object).where(pd.notna(records), None)
     rows = records.to_dict(orient="records")
 
     with engine.begin() as conn:
@@ -175,7 +173,7 @@ def upsert_location_aliases(df, engine):
     metadata = MetaData()
     aliases_table = Table("location_aliases", metadata, autoload_with=engine)
 
-    review_rows = df[df["_location_needs_review"] == True]
+    review_rows = df[df["_location_needs_review"].fillna(False).astype(bool)]
     seen = set()
     skipped_no_location = 0
     with engine.begin() as conn:
@@ -210,7 +208,7 @@ def apply_dedup_to_db(df, engine):
         return 0
 
     updates = []
-    for dup_idx, row in dup_pairs.iterrows():
+    for _dup_idx, row in dup_pairs.iterrows():
         orig_idx = row["is_duplicate_of_row"]
         updates.append({
             "dup_url": row["url"],
@@ -231,17 +229,24 @@ def apply_dedup_to_db(df, engine):
     return len(updates)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--csv", default="data/raw/lagos_properties.csv")
-    parser.add_argument("--schema", default="sql/schema.sql")
-    parser.add_argument("--report-out", default="data/quality_report.json")
-    args = parser.parse_args()
+def _existing_urls(urls, engine):
+    if not urls:
+        return set()
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT url FROM listings WHERE url = ANY(:urls)"), {"urls": list(urls)}).all()
+    return {r[0] for r in rows}
 
-    engine = get_engine()
-    apply_schema(engine, args.schema)
 
-    df = load_csv(args.csv)
+def load_csv_to_db(csv_path, report_out="data/quality_report.json", schema_path="sql/schema.sql", engine=None):
+    """Load a scraper CSV into Postgres and return counts for scraper_runs."""
+    engine = engine or get_engine()
+    apply_schema(engine, schema_path)
+
+    if not Path(csv_path).exists() or Path(csv_path).stat().st_size == 0:
+        return {"rows": 0, "added": 0, "updated": 0, "duplicates": 0, "needs_review": 0, "anomalies": 0}
+
+    df = load_csv(csv_path)
+    df = df.drop_duplicates(subset=["url"], keep="last").reset_index(drop=True)
     df = apply_location_normalization(df)
     df = flag_dedup_groups(df)
 
@@ -251,16 +256,36 @@ def main():
     anomalies = flag_load_time_anomalies(df)
 
     report = build_quality_report(df, anomalies, int(dedup_count), review_needed_count, dedup_review_count)
-    Path(args.report_out).parent.mkdir(parents=True, exist_ok=True)
-    with open(args.report_out, "w", encoding="utf-8") as f:
+    Path(report_out).parent.mkdir(parents=True, exist_ok=True)
+    with open(report_out, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, default=str)
 
+    existing = _existing_urls(df["url"].tolist(), engine)
     df_for_insert = df.drop(columns=["is_duplicate_of_row", "dedup_review_flag"])
     upsert_listings(df_for_insert, engine)
     upsert_location_aliases(df, engine)
     apply_dedup_to_db(df, engine)
 
-    print(f"Loaded {len(df)} rows. Duplicates flagged: {dedup_count}. Needs review: {review_needed_count}.")
+    return {
+        "rows": len(df),
+        "added": len(df) - len(existing),
+        "updated": len(existing),
+        "duplicates": int(dedup_count),
+        "needs_review": review_needed_count,
+        "anomalies": sum(len(v) for v in anomalies.values()),
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--csv", default="data/raw/lagos_properties.csv")
+    parser.add_argument("--schema", default="sql/schema.sql")
+    parser.add_argument("--report-out", default="data/quality_report.json")
+    args = parser.parse_args()
+
+    result = load_csv_to_db(args.csv, args.report_out, args.schema)
+    print(f"Loaded {result['rows']} rows ({result['added']} new, {result['updated']} updated). "
+          f"Duplicates flagged: {result['duplicates']}. Needs review: {result['needs_review']}.")
     print(f"Quality report written to {args.report_out}")
 
 

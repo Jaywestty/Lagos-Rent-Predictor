@@ -1,53 +1,89 @@
-import type { ChatAnswer } from "../../types/api";
-import { formatNaira, formatNairaRange } from "../../lib/format";
-import { stripPosition } from "../../lib/stats";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import type { BucketKey, ChatAnswer, Summary } from "../../types/api";
+import { BUCKET_LABELS, nairaShort, timeAgo } from "../../lib/format";
+import { saveSearch } from "../../services/api";
+import { PriceStrip, scaleFor } from "../charts/PriceStrip";
 
-function Row({ label, stat, scale }: { label: string; stat: { min: number | null; max: number | null; median: number | null; count: number } | null; scale: { min: number; max: number } }) {
-  if (!stat || stat.count === 0) return <div className="flex min-h-[44px] items-center justify-between border-b py-2 text-[15px]"><span>{label}</span><span className="text-[13px]" style={{ color: "var(--secondary)" }}>No data available</span></div>;
-  const pos = stat.min != null && stat.max != null && stat.median != null ? stripPosition(stat.min, stat.median, stat.max, scale.min, scale.max) : { left: 0, width: 100, marker: 50 };
-  return (
-    <div className="border-b py-3">
-      <div className="flex items-center justify-between gap-3 text-[15px]">
-        <span className="font-semibold">{label}</span>
-        <span className="tabular text-[13px]" style={{ color: "var(--secondary)" }}>{formatNairaRange(stat.min, stat.max)} per year</span>
-      </div>
-      <div className="relative mt-2 h-2 rounded" role="img" aria-label={`${label} range strip`} style={{ background: "var(--soft)" }}>
-        <div className="absolute top-0 h-2 rounded" style={{ left: `${pos.left}%`, width: `${pos.width}%`, background: "var(--primary)" }} />
-        <div className="absolute top-[-4px] h-4 w-1 rounded" style={{ left: `${pos.marker}%`, background: "var(--text)" }} />
-      </div>
-      <div className="mt-1 flex justify-between text-[12px] font-semibold tabular" style={{ color: "var(--secondary)" }}>
-        <span>{formatNaira(stat.min)}</span><span>Median {formatNaira(stat.median)}</span><span>{formatNaira(stat.max)} · {stat.count} listings</span>
-      </div>
-    </div>
-  );
+const CONFIDENCE = {
+  normal: { label: "Solid data", icon: "●", tone: "var(--good)", note: "10 or more listings" },
+  limited: { label: "Limited data", icon: "◐", tone: "var(--warn)", note: "4 to 9 listings" },
+  insufficient: { label: "Very little data", icon: "○", tone: "var(--danger)", note: "3 or fewer listings" },
+} as const;
+
+export function ConfidenceBadge({ confidence }: { confidence: keyof typeof CONFIDENCE }) {
+  const c = CONFIDENCE[confidence] ?? CONFIDENCE.insufficient;
+  return <span className="badge" title={c.note}><span aria-hidden style={{ color: c.tone }}>{c.icon}</span>{c.label}</span>;
 }
 
-export function RentAnswer({ answer }: { answer: ChatAnswer }) {
-  const all = [answer.breakdown?.one_bedroom?.min, answer.breakdown?.two_bedroom?.min, answer.breakdown?.three_bedroom?.min, answer.headline?.min].filter((v): v is number => v != null);
-  const allMax = [answer.breakdown?.one_bedroom?.max, answer.breakdown?.two_bedroom?.max, answer.breakdown?.three_bedroom?.max, answer.headline?.max].filter((v): v is number => v != null);
-  const scale = { min: Math.min(...all, 0), max: Math.max(...allMax, 1) };
-  const confIcon = answer.confidence === "normal" ? "●" : answer.confidence === "limited" ? "◐" : "○";
-  const confPattern = answer.confidence === "normal" ? "solid disc" : answer.confidence === "limited" ? "half disc" : "hollow disc";
+// The backend uses percentiles per bucket once it has 10+ listings (PERCENTILE_MIN_COUNT).
+function asSummary(s: { min: number | null; max: number | null; median: number | null; count: number } | null | undefined): Summary | null {
+  return s ? { ...s, range_method: s.count >= 10 ? "percentile" : "min_max" } : null;
+}
+
+export function RentAnswer({ answer, question, onAsk }: { answer: ChatAnswer; question?: string; onAsk?: (q: string) => void }) {
+  const qc = useQueryClient();
+  const [saved, setSaved] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const keys: BucketKey[] = ["self_contain", "one_bedroom", "two_bedroom", "three_bedroom"];
+  const rows = keys.map((k) => ({ key: k, stat: asSummary(answer.breakdown?.[k]) }));
+  const scale = scaleFor([...rows.map((r) => r.stat), answer.headline ? { ...answer.headline, median: null, count: 1, range_method: "min_max" } : null]);
+  const shown = rows.filter((r) => r.stat && r.stat.count > 0);
+  const where = answer.area || answer.location;
+  const freshness = answer.data_as_of ? timeAgo(answer.data_as_of) : answer.last_updated_days != null ? `${answer.last_updated_days} days ago` : null;
+
+  async function onSave() {
+    setSaved("saving");
+    try {
+      await saveSearch({ label: question || `Rent in ${where}`, query: question ?? null, area: where ?? null });
+      setSaved("saved");
+      qc.invalidateQueries({ queryKey: ["saved"] });
+    } catch {
+      setSaved("error");
+    }
+  }
+
   return (
-    <section className="card rise p-4 md:p-6" aria-label="Rent answer">
-      <p className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: "var(--secondary)" }}>Annual rent · NGN</p>
-      <h2 className="tabular text-[26px] font-bold leading-tight md:text-[28px]">{formatNairaRange(answer.headline?.min ?? null, answer.headline?.max ?? null)} per year</h2>
-      <p className="mt-1 flex flex-wrap items-center gap-2 text-[13px]" style={{ color: "var(--secondary)" }}>
-        <span aria-hidden>{confIcon}</span><span>{answer.confidence} confidence · {confPattern}</span>
-        {answer.median != null && <span className="tabular font-semibold" style={{ color: "var(--text)" }}>Median {formatNaira(answer.median)} per year</span>}
-      </p>
-      <div className="mt-3">
-        <Row label="Self contain" stat={answer.breakdown?.self_contain ?? null} scale={scale} />
-        <Row label="1 bedroom" stat={answer.breakdown?.one_bedroom ?? null} scale={scale} />
-        <Row label="2 bedroom" stat={answer.breakdown?.two_bedroom ?? null} scale={scale} />
-        <Row label="3 bedroom" stat={answer.breakdown?.three_bedroom ?? null} scale={scale} />
+    <section className="card rise overflow-hidden" aria-label="Rent answer">
+      <div className="p-4 md:p-6" style={{ background: "linear-gradient(180deg, var(--soft), transparent)" }}>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-[12px] font-semibold uppercase tracking-wide muted">{where ? `${where} · ` : ""}{answer.property_type || "All property types"} · per year</p>
+          <ConfidenceBadge confidence={answer.confidence} />
+        </div>
+        <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-2">
+          <div>
+            <p className="muted text-[13px]">Typical rent, per year</p>
+            <p className="tabular text-[40px] font-bold leading-none md:text-[48px]">{nairaShort(answer.median)}</p>
+          </div>
+          <div className="pb-1">
+            <p className="muted text-[13px]">{answer.range_method === "percentile" ? "Most listings fall between" : "Listings range from"}</p>
+            <p className="tabular text-[20px] font-semibold">{nairaShort(answer.headline?.min)} – {nairaShort(answer.headline?.max)}</p>
+          </div>
+        </div>
+        <p className="muted mt-3 text-[13px]">
+          From <strong style={{ color: "var(--text)" }}>{answer.listing_count} listing{answer.listing_count === 1 ? "" : "s"}</strong>
+          {freshness ? <>, newest {freshness}</> : null}. Monthly prices are converted to yearly.
+        </p>
       </div>
-      <p className="mt-3 text-[13px]" style={{ color: "var(--secondary)" }}>
-        Based on {answer.listing_count} listings{answer.last_updated_days != null ? `, updated ${answer.last_updated_days} days ago` : ""}. Range method: {answer.range_method === "percentile" ? "10th to 90th percentile" : "minimum to maximum"}.
-      </p>
-      {answer.follow_ups?.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2" aria-label="Follow ups">
-          {answer.follow_ups.slice(0, 3).map((q) => <span key={q} className="rounded-full border px-3 py-1 text-[13px]" style={{ borderColor: "var(--border)" }}>{q}</span>)}
+
+      {shown.length > 0 && (
+        <div className="px-4 pb-2 md:px-6">
+          {rows.map((r, i) => <PriceStrip key={r.key} label={BUCKET_LABELS[r.key]} stat={r.stat} scale={scale} delay={i * 70} />)}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3 md:px-6" style={{ borderColor: "var(--border)" }}>
+        {where && <Link to={`/areas/${encodeURIComponent(where)}`} className="btn-ghost inline-flex items-center">Area guide</Link>}
+        {where && <Link to={`/move-in?area=${encodeURIComponent(where)}${answer.median ? `&rent=${Math.round(answer.median)}` : ""}`} className="btn-ghost inline-flex items-center">Move-in cost</Link>}
+        {where && <Link to={`/compare?areas=${encodeURIComponent(where)}`} className="btn-ghost inline-flex items-center">Compare</Link>}
+        <button type="button" onClick={onSave} disabled={saved === "saving" || saved === "saved"} className="btn-ghost">
+          {saved === "saved" ? "Saved ✓" : saved === "saving" ? "Saving..." : saved === "error" ? "Could not save, retry" : "Save search"}
+        </button>
+      </div>
+
+      {answer.follow_ups?.length > 0 && onAsk && (
+        <div className="flex flex-wrap gap-2 px-4 pb-4 md:px-6" aria-label="Follow-up questions">
+          {answer.follow_ups.slice(0, 3).map((q) => <button key={q} type="button" className="chip" onClick={() => onAsk(q)}>{q}</button>)}
         </div>
       )}
     </section>

@@ -1,14 +1,34 @@
-from typing import Optional
+from datetime import datetime
 
 from query.entities import PropertyEntities
 from query.query_engine import SPARSE_AREA_THRESHOLD
 
 
-def format_price(price_ngn: Optional[float], price_period: Optional[str]) -> str:
+def format_price(price_ngn: float | None, price_period: str | None) -> str:
     if price_ngn is None:
         return "price not stated"
     period_label = f"/{price_period}" if price_period else ""
     return f"NGN {price_ngn:,.0f}{period_label}"
+
+
+def listing_card(listing: dict) -> dict:
+    """One listing as the frontend shows it. Legacy keys first, extra fields after."""
+    listed_at = listing.get("listed_at")
+    annual = listing.get("annual_price")
+    return {
+        "title": listing.get("title"),
+        "price": format_price(listing.get("price_ngn"), listing.get("price_period")),
+        "area": listing.get("area"),
+        "subarea": listing.get("subarea"),
+        "bedrooms": listing.get("bedrooms"),
+        "url": listing.get("url"),
+        "id": listing.get("id"),
+        "source": listing.get("source"),
+        "bathrooms": listing.get("bathrooms"),
+        "property_type": listing.get("property_type"),
+        "annual_price_ngn": float(annual) if annual is not None else None,
+        "listed_at": listed_at.isoformat() if isinstance(listed_at, datetime) else listed_at,
+    }
 
 
 def build_lookup_response(entities: PropertyEntities, listings: list[dict]) -> dict:
@@ -21,14 +41,7 @@ def build_lookup_response(entities: PropertyEntities, listings: list[dict]) -> d
         }
 
     results = [
-        {
-            "title": listing["title"],
-            "price": format_price(listing["price_ngn"], listing["price_period"]),
-            "area": listing["area"],
-            "subarea": listing["subarea"],
-            "bedrooms": listing["bedrooms"],
-            "url": listing["url"],
-        }
+        listing_card(listing)
         for listing in listings
     ]
 
@@ -72,12 +85,7 @@ def build_affordability_response(entities: PropertyEntities, result: dict) -> di
             "matched_count": len(rows),
             "sparse": len(rows) < SPARSE_AREA_THRESHOLD,
             "results": [
-                {
-                    "title": r["title"],
-                    "price": format_price(r["price_ngn"], r["price_period"]),
-                    "bedrooms": r["bedrooms"],
-                    "url": r["url"],
-                }
+                listing_card(r)
                 for r in rows[:5]
             ],
         })
@@ -87,12 +95,7 @@ def build_affordability_response(entities: PropertyEntities, result: dict) -> di
         {
             "area": area_name,
             "results": [
-                {
-                    "title": r["title"],
-                    "price": format_price(r["price_ngn"], r["price_period"]),
-                    "bedrooms": r["bedrooms"],
-                    "url": r["url"],
-                }
+                listing_card(r)
                 for r in rows[:3]
             ],
         }
@@ -141,13 +144,7 @@ def build_comparison_response(entities: PropertyEntities, results_by_option: dic
             "caveat": caveat,
             "cheapest": format_price(rows[0]["price_ngn"], rows[0]["price_period"]) if rows else None,
             "results": [
-                {
-                    "title": r["title"],
-                    "price": format_price(r["price_ngn"], r["price_period"]),
-                    "area": r["area"],
-                    "bedrooms": r["bedrooms"],
-                    "url": r["url"],
-                }
+                listing_card(r)
                 for r in rows
             ],
         })

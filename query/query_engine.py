@@ -42,7 +42,8 @@ def build_lookup_query(entities: PropertyEntities):
     where_clause = " AND ".join(filters)
     sql = text(f"""
         SELECT id, source, listing_type, url, title, price_ngn, price_period,
-               area, subarea, bedrooms, bathrooms, toilets, parking, property_type
+               area, subarea, bedrooms, bathrooms, toilets, parking, property_type, listed_at,
+               (CASE WHEN price_period = 'month' THEN price_ngn * 12 ELSE price_ngn END) AS annual_price
         FROM listings
         WHERE {where_clause}
         ORDER BY (CASE WHEN price_period = 'month' THEN price_ngn * 12 ELSE price_ngn END) ASC NULLS LAST
@@ -84,7 +85,7 @@ def build_affordability_query(entities: PropertyEntities):
     where_clause = " AND ".join(filters)
     sql = text(f"""
         SELECT id, source, listing_type, url, title, price_ngn, price_period,
-               area, subarea, bedrooms, bathrooms, toilets, parking, property_type,
+               area, subarea, bedrooms, bathrooms, toilets, parking, property_type, listed_at,
                {annual_price} AS annual_price
         FROM listings
         WHERE {where_clause}

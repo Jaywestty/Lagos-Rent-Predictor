@@ -110,3 +110,16 @@ def test_idempotency():
                     assert r1.status_code == 200 and r2.status_code == 200
                     assert r1.json() == r2.json()
                     assert mock_ex.call_count == 1
+
+
+def test_price_question_classified_as_advice_goes_to_listings():
+    from entrypoints.api import _route_price_questions_to_listings
+    from query.entities import PropertyEntities, QueryType
+
+    advice = PropertyEntities(query_type=QueryType.ADVICE, area="Lekki", resolved_query="2 bedroom price in Lekki")
+    routed = _route_price_questions_to_listings("How much is a 2 bedroom in Lekki?", advice)
+    assert routed.query_type == QueryType.LOOKUP
+    assert routed.beds == 2
+
+    tips = PropertyEntities(query_type=QueryType.ADVICE, area="Lekki", resolved_query="is Lekki safe")
+    assert _route_price_questions_to_listings("Is Lekki safe at night?", tips).query_type == QueryType.ADVICE

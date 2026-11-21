@@ -7,9 +7,7 @@ data/raw/lagos_properties.csv
 .env
 data/quality_report.json
 scripts/__pycache__/location_normalizer.cpython-310.pyc
-data/known_areas.json
 data/location_review_needed.csv
-data/known_admin_suffixes.json
 data/manual_known_areas.json
 data/raw/.checkpoint_npc_flats-apartments_sale.json
 data/raw/.checkpoint_npc_flats-apartments_rent.json
@@ -29,3 +27,10 @@ node_modules/
 dist/
 .vite/
 coverage/
+data/raw/runs/
+
+# Internal design and product notes (kept locally, not published)
+docs/
+
+# Local tooling
+.claude/

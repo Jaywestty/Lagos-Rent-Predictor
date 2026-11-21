@@ -129,6 +129,40 @@ def migrate():
 
 
 @app.command()
+def weekly_scrape(
+    since_days: int = typer.Option(7, help="Only keep listings from the last N days."),
+    max_pages: int = typer.Option(30, help="Upper bound on pages per site/category."),
+    site: str = typer.Option("all", help="npc, propertypro or all."),
+    category: str = typer.Option("all", help="One category or all."),
+    triggered_by: str = typer.Option("cli", help="Recorded in scraper_runs.triggered_by."),
+):
+    """Migrate, scrape recent rent listings, and load them into the database."""
+    from analytics_logging import apply_migrations
+    from scraping.runner import run_scrape
+
+    apply_migrations()
+    result = run_scrape(triggered_by=triggered_by, max_pages=max_pages, since_days=since_days, site=site, category=category)
+    typer.echo(f"Run {result['run_id']}: scrape={result['scrape']} load={result['load']}")
+
+
+@app.command()
+def warm_guides(top: int = typer.Option(15, help="Build guides for the N areas with the most listings."),
+                refresh: bool = typer.Option(False, help="Rebuild even when a fresh guide is cached.")):
+    """Pre-build area guides so users never wait on web search."""
+    from advice.area_guide import GuideUnavailable, get_guide
+    from observability.events import drain
+    from query.market import list_areas
+
+    for item in list_areas()[:top]:
+        try:
+            g = get_guide(item["area"], refresh=refresh)
+            typer.echo(f"{item['area']}: {'cached' if g.get('cached') else 'built'} ({len(g['sources'])} sources)")
+        except GuideUnavailable as exc:
+            typer.echo(f"{item['area']}: skipped ({exc})")
+    drain()
+
+
+@app.command()
 def create_admin():
     import os
 

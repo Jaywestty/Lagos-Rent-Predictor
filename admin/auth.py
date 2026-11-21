@@ -26,7 +26,7 @@ _login_failures: dict[str, list[float]] = {}
 
 
 def hash_password(password: str) -> str:
-    return _ph.hash_secret(secret=password.encode("utf-8")).hash
+    return _ph.hash(password)
 
 
 def verify_password(stored_hash: str, candidate: str) -> bool:

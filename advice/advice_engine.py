@@ -1,10 +1,10 @@
-from typing import Optional
 
 from groq import Groq
 from loguru import logger
 
 from advice.search_client import SearchError, search_advice
 from config import GROQ_API_KEY, GROQ_MODEL
+from observability.events import groq_chat
 from observability.tracer import record_call
 
 SYNTHESIS_SYSTEM_PROMPT = """You are a helpful assistant answering questions about renting or buying
@@ -63,7 +63,9 @@ def answer_advice_query(user_query: str) -> dict:
 
     try:
         record_call("groq")
-        response = client.chat.completions.create(
+        response = groq_chat(
+            client,
+            "advice",
             model=GROQ_MODEL,
             messages=[
                 {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
