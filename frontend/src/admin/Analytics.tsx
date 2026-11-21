@@ -20,9 +20,9 @@ function BarChart({ data }: { data: { area: string; c: number }[] }) {
 }
 
 export function Analytics() {
-  const overview = useQuery({ queryKey: ["overview"], queryFn: () => get("/admin/analytics/overview") });
-  const qot = useQuery({ queryKey: ["qot"], queryFn: () => get("/admin/analytics/questions-over-time?page=1&page_size=30") });
-  const areas = useQuery({ queryKey: ["areas"], queryFn: () => get("/admin/analytics/top-areas?page=1&page_size=10") });
+  const overview = useQuery({ queryKey: ["overview"], queryFn: () => get("/api/admin/analytics/overview") });
+  const qot = useQuery({ queryKey: ["qot"], queryFn: () => get("/api/admin/analytics/questions-over-time?page=1&page_size=30") });
+  const areas = useQuery({ queryKey: ["areas"], queryFn: () => get("/api/admin/analytics/top-areas?page=1&page_size=10") });
   const o = overview.data || {};
   return (
     <div>
@@ -53,7 +53,7 @@ function RecentTable() {
   const params = new URLSearchParams(location.search);
   const page = Math.max(1, Number(params.get("page") || "1"));
   const status = params.get("status") || "";
-  const q = useQuery({ queryKey: ["recent", page, status], queryFn: () => get(`/admin/analytics/recent-questions?page=${page}&page_size=10${status ? `&status=${encodeURIComponent(status)}` : ""}`) });
+  const q = useQuery({ queryKey: ["recent", page, status], queryFn: () => get(`/api/admin/analytics/recent-questions?page=${page}&page_size=10${status ? `&status=${encodeURIComponent(status)}` : ""}`) });
   if (q.isPending) return <p className="pulse mt-2">Loading table...</p>;
   if (q.isError) return <p role="alert">Could not load recent questions.</p>;
   const items = q.data.items || [];
