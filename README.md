@@ -119,7 +119,7 @@ Some listing sites refuse requests from cloud servers, so the weekly run happens
 powershell -ExecutionPolicy Bypass -File scripts\register-weekly-task.ps1
 ```
 
-This registers **Lagos Rent weekly scrape** for every Monday at 09:00. If the machine is off or asleep then, Windows runs it at the next opportunity. Each run looks back 7 days, so a late run misses nothing. The task needs an internet connection and the `.env` file in the project folder. Logs are written to `logs\weekly-scrape-*.log` and kept for 60 days.
+This registers **Lagos Rent weekly scrape** for every Monday at midnight (00:00). Add `-StartDate 2026-11-30` to choose the first run. If the machine is off or asleep then, Windows runs it at the next opportunity. Each run looks back 7 days, so a late run misses nothing. The task needs an internet connection and the `.env` file in the project folder. Logs are written to `logs\weekly-scrape-*.log` and kept for 60 days.
 
 Run it now, or remove it:
 
