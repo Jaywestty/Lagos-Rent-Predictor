@@ -86,13 +86,13 @@ export function Chat() {
   const data = query.data;
   const answer = data?.answer;
   const hasFilters = Boolean(area || beds || budget);
-  const stages = ["Reading your question...", `Checking ${area ? `${area} ` : ""}listings...`, "Working out the range and median..."];
+  const stages = ["Reading your question...", `Checking ${area ? `${area} ` : ""}listings...`, "Working out the price range..."];
 
   return (
     <div className="mx-auto w-full max-w-[1080px] px-4 md:px-10">
       <section className="stagger pt-6 md:pt-10">
         <h1 className="text-[28px] font-bold leading-tight md:text-[34px]">Rent in Lagos, priced from real listings.</h1>
-        <p className="muted mt-2 max-w-[620px] text-[15px]">Ask like you talk. We show the range, the median and how many listings back it, all from listings posted in the last few weeks.</p>
+        <p className="muted mt-2 max-w-[620px] text-[15px]">Ask like you talk. We show the typical rent, the price range and how many listings back it, all from listings posted in the last few weeks.</p>
       </section>
 
       <form className="card mt-5 flex items-center gap-2 p-2" onSubmit={(e) => { e.preventDefault(); submit(question); }} aria-label="Ask about rent">
