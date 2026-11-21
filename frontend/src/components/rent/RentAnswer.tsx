@@ -52,7 +52,7 @@ export function RentAnswer({ answer, question, onAsk }: { answer: ChatAnswer; qu
         </div>
         <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-2">
           <div>
-            <p className="muted text-[13px]">Typical rent (median)</p>
+            <p className="muted text-[13px]">Typical rent, per year</p>
             <p className="tabular text-[40px] font-bold leading-none md:text-[48px]">{nairaShort(answer.median)}</p>
           </div>
           <div className="pb-1">
