@@ -51,7 +51,7 @@ export function AreaGuide() {
 
       <section className="mt-6 grid gap-4 lg:grid-cols-[1.1fr_1fr]">
         <div className="card rise p-4 md:p-6">
-          <p className="muted text-[13px]">Typical yearly rent (median, all sizes)</p>
+          <p className="muted text-[13px]">Typical rent per year, all sizes</p>
           <p className="tabular text-[40px] font-bold leading-none">{nairaShort(s.overall?.median)}</p>
           <p className="muted mt-1 text-[13px] tabular">{s.overall?.range_method === "percentile" ? "Most listings" : "Listings"} between {nairaShort(s.overall?.min)} and {nairaShort(s.overall?.max)}</p>
           <div className="mt-3">{BUCKETS.map((b, i) => <PriceStrip key={b} label={BUCKET_LABELS[b]} stat={s.breakdown[b]} scale={scale} delay={i * 70} />)}</div>
@@ -62,7 +62,7 @@ export function AreaGuide() {
           </div>
           {trend.data ? (
             <>
-              <TrendChart title={`Weekly median rent · ${trend.data.label}`} series={[{ name: s.area, color: "var(--primary)", trend: trend.data }]} />
+              <TrendChart title={`Typical rent week by week · ${trend.data.label}`} series={[{ name: s.area, color: "var(--primary)", trend: trend.data }]} />
               {trend.data.change_pct != null && (
                 <p className="mt-2 text-[14px]"><strong className="tabular" style={{ color: trend.data.change_pct > 0 ? "var(--danger)" : "var(--good)" }}>{trend.data.change_pct > 0 ? "▲" : "▼"} {Math.abs(trend.data.change_pct)}%</strong> <span className="muted">since the first week on record</span></p>
               )}
