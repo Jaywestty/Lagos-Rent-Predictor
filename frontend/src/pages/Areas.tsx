@@ -29,7 +29,7 @@ export function Areas() {
                 <h2 className="text-[17px] font-semibold">{a.area}</h2>
                 <span className="muted text-[12px]">{a.listing_count} listing{a.listing_count === 1 ? "" : "s"}</span>
               </div>
-              <p className="tabular mt-2 text-[22px] font-bold">{nairaShort(a.median_ngn)}<span className="muted text-[12px] font-normal"> median /yr</span></p>
+              <p className="tabular mt-2 text-[22px] font-bold">{nairaShort(a.median_ngn)}<span className="muted text-[12px] font-normal"> typical rent a year</span></p>
               <div className="mt-2 h-[6px] rounded" style={{ background: "var(--soft)" }} aria-hidden>
                 <div className="grow-x h-[6px] rounded" style={{ width: `${((a.median_ngn ?? 0) / maxMedian) * 100}%`, background: "var(--primary)" }} />
               </div>
