@@ -25,18 +25,18 @@ export function PriceStrip({ label, stat, scale, color = "var(--primary)", delay
   const left = ((stat.min - scale.min) / span) * 100;
   const width = Math.max(((stat.max - stat.min) / span) * 100, 1.5);
   const marker = stat.median != null ? ((stat.median - scale.min) / span) * 100 : null;
-  const method = stat.range_method === "percentile" ? "10th to 90th percentile" : "lowest to highest";
+  const method = stat.range_method === "percentile" ? "most listings fall in this range" : "cheapest to dearest";
   return (
     <div className="border-b py-3" style={{ borderColor: "var(--border)" }}>
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[14px] font-semibold">{label}</span>
-        <span className="tabular text-[14px] font-semibold">{nairaShort(stat.median)} <span className="muted text-[12px] font-normal">median</span></span>
+        <span className="tabular text-[14px] font-semibold">{nairaShort(stat.median)} <span className="muted text-[12px] font-normal">typical</span></span>
       </div>
       <div
         className="relative mt-2 h-6 rounded outline-none"
         tabIndex={0}
         role="img"
-        aria-label={`${label}: ${nairaShort(stat.min)} to ${nairaShort(stat.max)}, median ${nairaShort(stat.median)}, ${stat.count} listings`}
+        aria-label={`${label}: ${nairaShort(stat.min)} to ${nairaShort(stat.max)} a year, typical ${nairaShort(stat.median)}, ${stat.count} listings`}
         onPointerEnter={() => setHover(true)}
         onPointerLeave={() => setHover(false)}
         onFocus={() => setHover(true)}
@@ -47,7 +47,7 @@ export function PriceStrip({ label, stat, scale, color = "var(--primary)", delay
         {marker != null && <div className="fade-in absolute top-[3px] h-[18px] w-[3px] rounded" style={{ left: `calc(${marker}% - 1.5px)`, background: "var(--text)", animationDelay: `${delay + 300}ms`, boxShadow: "0 0 0 2px var(--surface)" }} />}
         {hover && (
           <div className="tooltip" style={{ left: `${Math.min(Math.max(marker ?? left, 10), 70)}%`, bottom: 28 }}>
-            <strong className="tabular text-[13px]">{nairaShort(stat.median)}</strong> median · {nairaShort(stat.min)} to {nairaShort(stat.max)}
+            <strong className="tabular text-[13px]">{nairaShort(stat.median)}</strong> typical · {nairaShort(stat.min)} to {nairaShort(stat.max)} a year
             <div className="muted">{stat.count} listings · {method}</div>
           </div>
         )}
