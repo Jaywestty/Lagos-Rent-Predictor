@@ -29,7 +29,7 @@ function PublicLayout({ theme, onToggle }: { theme: string; onToggle: () => void
     <>
       <Header theme={theme} onToggle={onToggle} />
       <main className="fade-in"><Outlet /></main>
-      <footer className="muted mx-auto max-w-[1080px] px-4 pb-8 text-[12px] md:px-10">Rent figures come only from listings on NigeriaPropertyCentre and PropertyPro, refreshed weekly. Area notes are summarised from cited web sources.</footer>
+      <footer className="muted mx-auto max-w-[1080px] px-4 pb-8 text-[12px] md:px-10">Prices come from public listings on Nigerian property sites, refreshed weekly. Area notes are summarised from cited web sources.</footer>
     </>
   );
 }
