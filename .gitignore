@@ -28,3 +28,9 @@ dist/
 .vite/
 coverage/
 data/raw/runs/
+
+# Internal design and product notes (kept locally, not published)
+docs/
+
+# Local tooling
+.claude/
