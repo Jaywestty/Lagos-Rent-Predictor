@@ -8,7 +8,7 @@ Seams already in place:
 - Scraper runs table: sql/migrations/0002_scraper_runs.sql defines triggered_by, started_at, completed_at, status (queued, running, success, failed), listings_discovered, listings_added, listings_updated, duplicates_skipped, validation_failures, error_count and log_excerpt.
 - Analytics logging: question_events logs every question without IP storage, so hosted deploy can keep the same privacy rule.
 - Environment variables: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_HOST, POSTGRES_PORT, GROQ_API_KEY, TAVILY_API_KEY and GROQ_MODEL from config.py and .env.example. CI must inject these as secrets and never log them.
-- Admin scrape: POST /admin/operations/scrape enforces a single concurrent run with a lock plus 60 second cooldown, records admin:<email> as triggered_by and polls via GET /admin/operations/scrape/{job_id}.
+- Admin scrape: POST /api/admin/operations/scrape enforces a single concurrent run with a lock plus 60 second cooldown, records admin:<email> as triggered_by and polls via GET /api/admin/operations/scrape/{job_id}.
 - Freshness view: area_freshness shows listing count and last ingested time per area for monitoring hosted ingest.
 
 Suggested CI shape (not built in this task):
