@@ -146,6 +146,23 @@ def weekly_scrape(
 
 
 @app.command()
+def warm_guides(top: int = typer.Option(15, help="Build guides for the N areas with the most listings."),
+                refresh: bool = typer.Option(False, help="Rebuild even when a fresh guide is cached.")):
+    """Pre-build area guides so users never wait on web search."""
+    from advice.area_guide import GuideUnavailable, get_guide
+    from observability.events import drain
+    from query.market import list_areas
+
+    for item in list_areas()[:top]:
+        try:
+            g = get_guide(item["area"], refresh=refresh)
+            typer.echo(f"{item['area']}: {'cached' if g.get('cached') else 'built'} ({len(g['sources'])} sources)")
+        except GuideUnavailable as exc:
+            typer.echo(f"{item['area']}: skipped ({exc})")
+    drain()
+
+
+@app.command()
 def create_admin():
     import os
 
