@@ -125,8 +125,13 @@ def overview(request: Request, hours: int = Query(24, ge=1, le=24 * 90), admin_s
         health.append({"level": "critical", "text": f"{req['server_errors']} server errors ({req['server_errors'] / total:.1%} of requests)"})
     if any(a["failures"] for a in ai):
         health.append({"level": "warning", "text": f"{sum(a['failures'] for a in ai)} failed AI or search calls"})
+    blocked_note = ""
+    if last and "BLOCKED:" in (last.get("log_excerpt") or ""):
+        blocked_note = " · " + (last["log_excerpt"].split("BLOCKED:", 1)[1].split("\n", 1)[0].strip())
     if last and last["status"] == "failed":
-        health.append({"level": "critical", "text": "Last scrape run failed"})
+        health.append({"level": "critical", "text": f"Last scrape run failed{blocked_note}"})
+    elif last and last["status"] == "partial":
+        health.append({"level": "warning", "text": f"Last scrape run was partial{blocked_note}"})
     if last and last["started_at"] and last["started_at"] < now - timedelta(days=8):
         health.append({"level": "warning", "text": "No scrape run in over 8 days"})
     if not last:
