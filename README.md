@@ -220,6 +220,17 @@ POST /api/chat and POST /api/chat/stream return a typed versioned answer with st
 
 Admin routes under /api/admin implement login, logout, me, analytics overview with six KPIs, questions over time, top areas, recent questions, scraper runs, freshness, review queue, manual scrape with polling and logs, and PATCH review. All require a session cookie and CSRF token for state changes.
 
+## Product features
+
+- Ask: natural-language rent questions answered from listings, with a median-first answer card, range strips per size, confidence, freshness and the listings behind it. Quick-search chips for area, size and budget.
+- Area guides (/areas, /areas/:area): rent by size, weekly trend, newest listings, a move-in cost calculator, and "living here" notes (commute, flooding, power, safety, amenities) built from cited web sources and cached 30 days. Pre-build them with `uv run python -m entrypoints.cli warm-guides --top 15`.
+- Compare (/compare): up to three areas side by side for one size, with ranges, trends and a median table.
+- Move-in cost (/move-in): yearly rent plus agency, legal and caution fees, service charge and moving costs, all editable.
+- Saved (/saved): saved searches with today's median, and favourite listings, kept per device without an account.
+- Admin observability (/admin/observability): health alerts, traffic and p50/p95 latency per route, server errors with stack traces, every Groq and Tavily call with latency and tokens, pipeline stages, answer quality and unanswered areas, data quality, scraper status and next run, feature usage, guide rebuilds, and a request-id trace view.
+
+Public endpoints added: GET /api/areas, /api/areas/{area}, /api/areas/{area}/trends, /api/areas/{area}/listings, /api/areas/{area}/guide, /api/compare, GET/POST/DELETE /api/me/saved-searches and /api/me/favorites (X-Client-Id header), POST /api/events. Admin: /api/admin/observability/{overview,timeseries,errors,ai-calls,requests/{id},guides}.
+
 ## Data rules
 
 - Rent is quoted per year in Lagos. The query engine annualizes monthly prices as price_ngn times 12 and treats year and null periods as already annual. Do not mix monthly and yearly figures silently.
