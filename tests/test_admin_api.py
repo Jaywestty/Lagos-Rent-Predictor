@@ -51,3 +51,12 @@ def test_analytics_aggregation_sql():
     assert "GROUP BY parsed_location" in src
     assert "COUNT(*) FROM listings WHERE is_duplicate_of IS NULL" in src
     assert "sessions" in src and "average_latency_ms" in src
+
+
+def test_password_hash_round_trip():
+    from admin.auth import hash_password, verify_password
+
+    h = hash_password("correct horse battery")
+    assert h.startswith("$argon2")
+    assert verify_password(h, "correct horse battery")
+    assert not verify_password(h, "wrong")
