@@ -69,3 +69,6 @@ export type AreaGuide = {
 export type CompareResult = { bucket: string; label: string; areas: (AreaStats & { focus: Summary | null; trend: Trend })[] };
 export type SavedSearch = { id: number; label: string; query: string | null; area: string | null; bedrooms: number | null; max_budget_ngn: number | null; created_at: string; current?: { listing_count: number; median_ngn: number | null; data_as_of: string | null } };
 export type Favorite = { id: number; url: string; title: string | null; price_text: string | null; annual_price_ngn: number | null; area: string | null; bedrooms: number | null; source: string | null; created_at: string; still_listed: boolean; listed_at: string | null };
+export type ChatThreadSummary = { id: string; title: string; message_count: number; created_at: string; updated_at: string; last_question: string | null };
+export type ChatThreadMessage = { id: number; question: string; created_at: string; payload: { answer: ChatAnswer; listings: Listing[]; advice?: { text: string; sources: { title: string; url: string }[] } } };
+export type ChatThread = { id: string; title: string; message_count: number; created_at: string; updated_at: string; messages: ChatThreadMessage[] };
