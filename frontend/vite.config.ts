@@ -37,8 +37,8 @@ export default defineConfig({
   ] as never,
   server: {
     proxy: {
-      '/api': { target: process.env.VITE_API_BASE_URL || 'http://localhost:8000', changeOrigin: true },
-      '/query': { target: process.env.VITE_API_BASE_URL || 'http://localhost:8000', changeOrigin: true },
+      '/api': { target: process.env.API_PROXY_TARGET || 'http://localhost:8000', changeOrigin: true },
+      '/query': { target: process.env.API_PROXY_TARGET || 'http://localhost:8000', changeOrigin: true },
     },
   },
   build: { rollupOptions: { output: {} } },
