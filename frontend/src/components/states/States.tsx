@@ -1,4 +1,5 @@
 import { Mascot } from "../brand/Mascot";
+import type { NoDataHelp } from "../../types/api";
 
 export function LoadingState({ text = "Checking listings..." }: { text?: string }) {
   return (
@@ -15,14 +16,46 @@ export function LoadingState({ text = "Checking listings..." }: { text?: string 
   );
 }
 
-export function NoDataState({ suggestions = [], onPick }: { suggestions?: string[]; onPick?: (area: string) => void }) {
+type NoDataProps = { help?: NoDataHelp | null; question?: string; suggestions?: string[]; onAsk?: (q: string) => void };
+
+/** Explains why a search found nothing and offers the most useful next step. */
+export function NoDataState({ help, question = "", suggestions = [], onAsk }: NoDataProps) {
+  const area = help?.area;
+  const others = (help?.suggestions?.length ? help.suggestions : suggestions).filter((a) => a !== area).slice(0, 4);
+  // The same question with the misspelt area swapped for the suggestion (plain text search, no regex).
+  const at = area ? question.toLowerCase().indexOf(area.toLowerCase()) : -1;
+  const fixed = help?.did_you_mean && area
+    ? (at >= 0 ? question.slice(0, at) + help.did_you_mean + question.slice(at + area.length) : `How much is rent in ${help.did_you_mean}?`)
+    : null;
+
+  let title = "No recent listings for that search";
+  let body = "Every answer here comes from real listings posted in the last few weeks, and none match this yet. Try a nearby area or a different size.";
+  if (help?.did_you_mean) {
+    title = `Did you mean ${help.did_you_mean}?`;
+    body = `We couldn't find an area called "${area}".`;
+  } else if (area && help?.covered) {
+    title = `Nothing of that kind in ${area} right now`;
+    body = `We have ${help.area_listings ?? "some"} recent listings in ${area}, just none that match this size or type. Try a different size, or see everything in ${area}.`;
+  } else if (area) {
+    title = `We don't cover ${area} yet`;
+    body = `There are no recent listings for ${area}, so we can't give a price without guessing. New listings are added every week, mostly from the busiest parts of Lagos. You can still ask what living there is like.`;
+  }
+
   return (
     <section className="card rise p-6" aria-label="No data">
-      <h2 className="text-[17px] font-semibold">No recent listings for that search</h2>
-      <p className="muted mt-1 text-[15px]">We only answer from real listings, and none match yet. Try a nearby area or a different size.</p>
-      {suggestions.length > 0 && onPick && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {suggestions.map((a) => <button key={a} type="button" className="chip" onClick={() => onPick(a)}>Try {a}</button>)}
+      <div className="flex items-start gap-3">
+        <span className="shrink-0"><Mascot size={44} mood="idle" /></span>
+        <div className="min-w-0">
+          <h2 className="text-[18px] font-bold">{title}</h2>
+          <p className="muted mt-1 text-[15px] leading-relaxed">{body}</p>
+        </div>
+      </div>
+      {onAsk && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {fixed && <button type="button" className="btn" onClick={() => onAsk(fixed)}>Search {help!.did_you_mean} instead</button>}
+          {area && help?.covered && <button type="button" className="btn" onClick={() => onAsk(`How much is rent in ${area}?`)}>See all of {area}</button>}
+          {area && !help?.covered && !help?.did_you_mean && <button type="button" className="btn" onClick={() => onAsk(`What is it like to live in ${area}, Lagos?`)}>What is {area} like to live in?</button>}
+          {others.map((a) => <button key={a} type="button" className="chip" onClick={() => onAsk(`How much is rent in ${a}?`)}>Try {a}</button>)}
         </div>
       )}
     </section>
