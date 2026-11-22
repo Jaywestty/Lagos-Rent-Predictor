@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { nairaShort, timeAgo } from "../../lib/format";
 import { useSiteStats } from "../../lib/useSiteStats";
+import { LagosScene, Mascot } from "../brand/Mascot";
 
 const HEADLINE = ["Know", "what", "rent", "really", "costs"];
 const HEADLINE_2 = ["before", "you", "call", "an", "agent."];
@@ -48,9 +49,13 @@ export function Welcome({ composer, quickSearch, onAsk, chatCount = 0, onOpenCha
       {/* Hero */}
       <section className="ledger relative overflow-hidden border-b" style={{ borderColor: "var(--border)" }}>
         <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(180deg, color-mix(in srgb, var(--bg) 20%, transparent), var(--bg) 92%)" }} />
-        <div className="relative mx-auto max-w-[1200px] px-4 pb-10 pt-10 md:px-8 md:pb-14 md:pt-16">
+        <div className="relative mx-auto grid max-w-[1200px] items-end gap-6 px-4 pb-10 pt-8 md:px-8 md:pb-14 md:pt-14 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="kicker fade-in">Lagos rent · from this week&apos;s listings</p>
+            <div className="flex items-center gap-3">
+              <span className="m-enter lg:hidden"><Mascot size={64} mood="wave" /></span>
+              <p className="kicker fade-in">Adugbo AI · Lagos rent from this week&apos;s listings</p>
+            </div>
             {chatCount > 0 && (
               <button type="button" className="btn-ghost fade-in" onClick={onOpenChats}>Your chats · {chatCount}</button>
             )}
@@ -70,6 +75,20 @@ export function Welcome({ composer, quickSearch, onAsk, chatCount = 0, onOpenCha
             <summary className="cursor-pointer text-[14px] font-semibold" style={{ color: "var(--action)" }}>Or build a search by area, size and budget</summary>
             <div className="mt-4">{quickSearch}</div>
           </details>
+          </div>
+
+          {/* Adugbo waves in front of the Lagos skyline and the Lekki–Ikoyi link bridge (desktop). */}
+          <div className="relative hidden h-[440px] lg:block">
+            <LagosScene className="absolute inset-x-[-40px] bottom-0 h-[230px] w-[calc(100%+80px)]" />
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2">
+              <div className="m-enter" style={{ animationDelay: "300ms" }}><Mascot size={250} mood="wave" /></div>
+            </div>
+            <div className="bubble-in absolute -left-6 top-2 max-w-[178px] rounded-2xl rounded-br-md border px-4 py-3 text-[14px] leading-snug shadow-[0_8px_24px_rgba(27,36,32,.08)]"
+              style={{ background: "var(--surface)", borderColor: "var(--border)", animationDelay: "1100ms" }}>
+              <p className="font-display font-bold">Ẹ káàbọ̀! I&apos;m Adugbo.</p>
+              <p className="muted mt-0.5">Ask me what rent costs in any Lagos neighbourhood.</p>
+            </div>
+          </div>
         </div>
       </section>
 
