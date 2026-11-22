@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Header } from "./components/layout/Header";
 import { Footer } from "./components/layout/Footer";
 import { ChromeContext } from "./lib/useSiteStats";
+import { useOnline } from "./lib/pwa";
 import { Chat } from "./components/chat/Chat";
 import { useTheme } from "./hooks/useTheme";
 import { Skeleton } from "./components/states/States";
@@ -30,10 +31,16 @@ function PublicLayout({ theme, onToggle }: { theme: string; onToggle: () => void
   // A running chat fills the screen with its composer pinned at the bottom, so the footer steps aside.
   const [chatActive, setChatActive] = useState(false);
   const chrome = useMemo(() => ({ setChatActive }), []);
+  const online = useOnline();
   return (
     <ChromeContext.Provider value={chrome}>
       <div className="flex min-h-screen flex-col">
         <Header theme={theme} onToggle={onToggle} />
+        {!online && (
+          <p role="status" className="fade-in px-4 py-2 text-center text-[13px] font-semibold" style={{ background: "var(--sand)", color: "var(--warn)" }}>
+            You are offline. Pages you opened still work; new answers need a connection.
+          </p>
+        )}
         <main className="fade-in flex-1"><Outlet /></main>
         {!chatActive && <Footer />}
       </div>
