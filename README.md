@@ -1,43 +1,79 @@
 # Lagos Rent
 
-Rent research for Lagos, answered from real listings.
+**Know what rent in Lagos really costs, before you start calling agents.**
 
-Ask a question in plain language, such as *"How much is a 2 bedroom in Yaba?"*, and get the typical yearly rent, the price range, and the listings behind the answer. Every rent figure comes from property listings collected each week. When the data is thin, the app says so instead of guessing.
+Lagos Rent is a web app that answers rent questions, such as *"How much is a 2 bedroom in Yaba?"*, using real property listings collected every week. It shows the typical rent, the price range, how many listings the answer is based on, and the listings themselves.
 
-## Features
+---
 
-- **Ask in plain language.** Questions are parsed by an LLM into area, size and budget, then answered with SQL over stored listings. Follow-up questions keep context ("what about a 3 bedroom?").
-- **Clear answers.** Typical rent, the range most listings fall in, a breakdown by size, how many listings were used, how fresh they are, and a confidence level.
-- **Area guides.** Rent by size, weekly price trends, newest listings, and notes on commute, flooding, power, safety and amenities, summarised from cited web sources.
-- **Compare areas.** Up to three areas side by side for a chosen size.
-- **Move-in cost calculator.** Yearly rent plus agency, legal and caution fees, service charge and moving costs.
-- **Saved searches and favourites.** Kept per device, no sign-up.
-- **Weekly data refresh.** A scheduled task collects listings from the last 7 days and loads them automatically.
-- **Private admin console.** Usage analytics, scraper operations, and full observability: traffic, latency, errors, AI call costs and data quality.
+## The problem
 
-## How it works
+Finding a place to rent in Lagos is hard to do well:
+
+- **Prices are scattered and unclear.** Listings are spread across many websites and agents. There is no single, trustworthy answer to "what should a 2 bedroom in Gbagada cost this year?"
+- **Asking prices vary wildly.** The same kind of flat can be listed at very different prices. Without a sense of the normal range, it is hard to know when a price is fair, high or suspicious.
+- **The first payment is much more than the rent.** Agency, legal and caution fees, often with one or two years paid upfront, can make the cash needed to move in far higher than the yearly rent.
+- **Areas are hard to judge from a distance.** Traffic, flooding, power supply and safety matter as much as price, and that information is scattered across the web.
+- **Old figures mislead.** Rent moves quickly. Blog posts and word-of-mouth prices go out of date.
+
+## What Lagos Rent does about it
+
+| You want to know | Lagos Rent gives you |
+| --- | --- |
+| "How much is a 2 bedroom in Yaba?" | The **typical rent** and the **range most listings fall in**, worked out from listings posted in the last few weeks, plus the listings themselves. |
+| "Is this answer reliable?" | Every answer says **how many listings it is based on** and how recent they are, with a plain confidence label. When there is too little data, it says so instead of guessing. |
+| "What will I actually pay to move in?" | A **move-in cost calculator**: rent plus agency, legal and caution fees, service charge and moving costs, all editable. |
+| "What is it like to live there?" | **Area guides** covering commute, flooding, electricity, safety and amenities, summarised from web sources that are linked so you can check them. |
+| "Yaba or Surulere?" | **Side-by-side comparison** of up to three areas for the size you need. |
+| "Are prices going up?" | **Weekly price trends** per area and size. |
+| "Where was I?" | **Chat history**, **saved searches** and **favourite listings**, kept on your device with no sign-up. |
+
+### Principles
+
+- **Every price comes from a real listing.** The AI only reads your question; it never invents prices. Rent figures are calculated from stored listings, and each answer links back to them.
+- **Honest about uncertainty.** Answers show how many listings they rest on, and flag listings whose price looks mistyped.
+- **Fresh data.** Listings are collected weekly, and only those posted in the last 7 days are added.
+- **Private by default.** No accounts, no IP addresses, no personal data. History and saved items are tied to a random ID kept in your browser.
+
+---
+
+## Using the app
+
+1. **Ask** a question in plain words, or tap an area, a size and a budget.
+2. **Read the answer:** the typical rent, the range, a breakdown by size, and the listings behind it.
+3. **Follow up** in the same chat ("what about a 3 bedroom?"). The app remembers what you were asking about.
+4. **Open your chats** any time from *Your chats*, start a *New chat*, or delete old ones.
+5. **Explore** *Area guides*, *Compare*, *Move-in cost* and *Saved* from the top menu.
+
+---
+
+## For developers
+
+### How it works
 
 ```mermaid
 flowchart LR
-    Cron[Weekly task on a local machine] --> Scraper[Scraper: last 7 days]
-    Scraper --> Loader[Loader: clean, dedupe, upsert]
-    Loader --> DB[(PostgreSQL / Supabase)]
-    Loader --> Snap[Weekly price snapshots]
-    Snap --> DB
-    User[Web app] --> API[FastAPI]
+    Task[Weekly scheduled task] --> Scraper[Scraper: last 7 days]
+    Scraper -->|each page saved as it goes| DB[(PostgreSQL / Supabase)]
+    Scraper --> Final[Final pass: de-duplicate, quality report, price snapshots]
+    Final --> DB
+    User[Web app, React] -->|/api| API[FastAPI]
     API --> LLM[Groq: understand the question]
-    API --> DB
-    API --> Guides[Area guides: Tavily + Groq, cached]
-    Guides --> DB
+    API -->|SQL over listings| DB
+    API --> Guides[Area guides: Tavily + Groq, cached 30 days]
+    API --> History[Chat history, saved items]
+    History --> DB
     API --> Obs[Observability events]
     Obs --> DB
+    Admin[Admin console] --> API
 ```
 
-1. **Collect.** Every Monday a scheduled task scrapes rent listings from public Nigerian property sites. It keeps only listings dated within the last 7 days, and respects each site's robots.txt.
-2. **Load.** Listings are normalised (area names, monthly to yearly prices), de-duplicated, and upserted into Postgres. Weekly price snapshots are recomputed for trends.
-3. **Answer.** The API extracts what the user is asking, queries matching listings, and returns a typed answer with figures, range method and confidence.
+1. **Collect.** A weekly task scrapes rent listings from public Nigerian property sites, newest first. It keeps listings dated within the last 7 days, respects each site's robots.txt, and skips any site that refuses access.
+2. **Store.** Each scraped page is cleaned (area names, monthly to yearly prices) and saved straight away, so a stopped run never loses work and the next run resumes. A final pass removes duplicates, writes a quality report and updates weekly price snapshots.
+3. **Answer.** The API uses an LLM only to turn the question into structured filters (area, bedrooms, budget). Prices come from SQL over stored listings and are returned as a typed answer with range method and confidence.
+4. **Remember.** Each conversation is a thread. Questions and answers are saved per device, and the thread ID doubles as the follow-up memory key.
 
-## Tech stack
+### Tech stack
 
 | Layer | Tools |
 | --- | --- |
@@ -47,147 +83,122 @@ flowchart LR
 | Scraping | requests, BeautifulSoup |
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS, TanStack Query |
 | Tooling | uv, Ruff, mypy, pytest, Vitest, ESLint |
-| Scheduling | Windows Task Scheduler, GitHub Actions (manual runs) |
+| Hosting | Vercel (frontend), Render (API), Supabase (database), Windows Task Scheduler (weekly scrape) |
 
-## Getting started
+### Run it locally
 
-### Prerequisites
-
-- [uv](https://docs.astral.sh/uv/) (installs Python 3.12)
-- Node.js 20 or newer
-- A PostgreSQL database (Supabase works out of the box)
-- API keys for [Groq](https://console.groq.com) and [Tavily](https://tavily.com)
-
-### Setup
+Prerequisites: [uv](https://docs.astral.sh/uv/) (installs Python 3.12), Node.js 20+, a PostgreSQL database (Supabase works out of the box), and API keys for [Groq](https://console.groq.com) and [Tavily](https://tavily.com).
 
 ```bash
 git clone https://github.com/Jaywestty/Lagos-Rent-Predictor.git
 cd Lagos-Rent-Predictor
-cp .env.example .env          # then fill in the values below
+cp .env.example .env                      # fill in the values below
 uv sync
 npm install --prefix frontend
-uv run python -m entrypoints.cli migrate
+uv run python -m entrypoints.cli migrate  # create tables
+```
+
+```bash
+uv run uvicorn entrypoints.api:app --port 8000   # API
+npm run dev --prefix frontend                     # web app on http://localhost:5173 (proxies /api to :8000)
 ```
 
 ### Environment variables
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | Yes | Postgres connection string. For Supabase, use the Session pooler URI. TLS is enabled automatically for remote hosts. |
+| `DATABASE_URL` | Yes | Postgres connection string. For Supabase use the Session pooler URI. TLS is enabled automatically for remote hosts. |
 | `GROQ_API_KEY` | Yes | Understanding questions and writing area guides |
 | `TAVILY_API_KEY` | Yes | Web search for area guides and general advice |
 | `GROQ_MODEL` | No | Defaults to `openai/gpt-oss-120b` |
+| `ALLOWED_ORIGINS` | No | Comma-separated origins allowed to call the API directly (CORS). Not needed with the Vercel proxy setup. |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | No | Used once by `create-admin` |
-| `POSTGRES_*` | No | Local Postgres fallback when `DATABASE_URL` is not set |
+| `API_PROXY_TARGET` | No | Frontend dev only: where Vite proxies `/api` (default `http://localhost:8000`) |
 
 Never commit `.env`.
 
-### Run locally
+### Loading data
 
 ```bash
-uv run uvicorn entrypoints.api:app --port 8000     # API
-npm run dev --prefix frontend                       # Web app on http://localhost:5173
+uv run python -m entrypoints.cli weekly-scrape --since-days 7 --max-pages 30   # scrape and load
+uv run python -m entrypoints.cli warm-guides --top 15                           # pre-build area guides
+uv run python -m entrypoints.cli load-run                                       # load a stopped run's file
 ```
 
-The Vite dev server proxies `/api` to the backend.
+**Weekly schedule (Windows).** Some listing sites refuse requests from cloud servers, so the weekly scrape runs on a local machine:
 
-### Load data
-
-```bash
-# Scrape the last 7 days and load it (what the weekly job runs)
-uv run python -m entrypoints.cli weekly-scrape --since-days 7 --max-pages 30
-
-# Pre-build area guides for the 15 busiest areas
-uv run python -m entrypoints.cli warm-guides --top 15
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\register-weekly-task.ps1 -StartDate 2026-11-30
+Start-ScheduledTask -TaskName "Lagos Rent weekly scrape"      # run now
+Unregister-ScheduledTask -TaskName "Lagos Rent weekly scrape" # remove
 ```
 
-### Admin access
+The task runs every Monday at 00:00 and catches up if the machine was off. Logs go to `logs\weekly-scrape-*.log`. Runs can be stopped at any time; finished pages are kept and the next run continues from there (`--resume-hours`, default 72).
 
-The admin console lives at `/admin` and is not linked anywhere in the public site. Accounts can only be created from the command line:
+`.github/workflows/weekly-scrape.yml` allows manual cloud runs (**Run workflow** in GitHub Actions) for sites that accept cloud traffic.
+
+### Admin console
+
+The admin console lives at `/admin` and is not linked from the public site. Accounts can only be created from the command line:
 
 ```bash
 uv run python -m entrypoints.cli create-admin
 ```
 
-Admin sessions use Argon2-hashed passwords, HttpOnly cookies, CSRF tokens on every change, and login lockout after repeated failures.
+It covers usage analytics, scraper operations (live progress with a Stop button), and observability: traffic, latency, errors with stack traces, AI and search calls with token counts, data quality, and a per-request trace. Sessions use Argon2-hashed passwords, HttpOnly cookies, CSRF tokens and login lockout. A run whose progress heartbeat goes quiet for 5 minutes is marked *interrupted* automatically.
 
-**Operations** starts a scrape and shows it live: the current site and category (step x of y), the listing being read on the current page, and running counts of new, updated, skipped and too-old listings, with a warning if updates stop arriving. **Stop scrape** ends a run after the listing it is on. Everything saved so far is kept, the run is marked *stopped*, and the next run continues from there. Stopping works the same for runs started by the scheduled task.
+### Deployment
 
-## Scheduled scraping
+- **Frontend on Vercel.** Project root `frontend`. `frontend/vercel.json` serves the single-page app and forwards `/api/*` to the API, so the browser sees one origin (cookies and CORS just work). Replace `YOUR-RENDER-SERVICE` in it with your Render service name.
+- **API on Render.** `render.yaml` is a ready Blueprint: build `uv sync --frozen --no-dev`, start `uvicorn entrypoints.api:app`, health check `/health`. Set `DATABASE_URL`, `GROQ_API_KEY` and `TAVILY_API_KEY` in Render.
+- **Database on Supabase.** Run `uv run python -m entrypoints.cli migrate` once against it.
+- **Scraping** stays on a local machine (see above). It writes to the same database.
 
-Some listing sites refuse requests from cloud servers, so the weekly run happens on a local Windows machine with Windows Task Scheduler:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\register-weekly-task.ps1
-```
-
-This registers **Lagos Rent weekly scrape** for every Monday at midnight (00:00). Add `-StartDate 2026-11-30` to choose the first run. If the machine is off or asleep then, Windows runs it at the next opportunity. Each run looks back 7 days, so a late run misses nothing. The task needs an internet connection and the `.env` file in the project folder. Logs are written to `logs\weekly-scrape-*.log` and kept for 60 days.
-
-Run it now, or remove it:
-
-```powershell
-Start-ScheduledTask -TaskName "Lagos Rent weekly scrape"
-Unregister-ScheduledTask -TaskName "Lagos Rent weekly scrape"
-```
-
-A site that refuses access is skipped for that run and the run is marked *partial* (or *failed* if nothing was collected), visible in the admin console.
-
-**Stopping and resuming.** Each page is saved to the database as soon as it is scraped, so a run can be stopped at any time without losing finished pages. Starting it again skips listings saved in the last 72 hours (`--resume-hours`), so it carries on from where it stopped. A run that was stopped shows as *interrupted*. To load the file of a run that was stopped by an older version of the code:
-
-```powershell
-uv run python -m entrypoints.cli load-run
-```
-
-`.github/workflows/weekly-scrape.yml` is kept for manual cloud runs (**Run workflow** in the Actions tab) of sites that allow cloud traffic. It needs the `DATABASE_URL` repository secret, plus `GROQ_API_KEY` and `TAVILY_API_KEY` to pre-build area guides.
-
-## Testing and quality
+### Testing and quality
 
 ```bash
-uv run pytest            # backend tests (never touch the real database)
+uv run pytest                       # backend tests (never touch the real database)
 uv run ruff check
 npm test --prefix frontend
 npm run lint --prefix frontend
-npm run build --prefix frontend   # includes a bundle size budget
+npm run build --prefix frontend     # includes a bundle size budget
 ```
 
-## Project structure
+### Project structure
 
 ```
 admin/          Admin API: auth, analytics, operations, observability
 advice/         Web search, advice answers and area guides
-conversation/   Session memory for follow-up questions
+conversation/   Follow-up memory and chat history
 entrypoints/    FastAPI app, public API routes and the Typer CLI
 eval/           Extraction and advice evaluation sets
 observability/  Request, error, AI-call and usage event recording
-pipeline/       CSV loader with de-duplication and a quality report
+pipeline/       Loader with de-duplication and a quality report
 query/          Question parsing, SQL queries, stats, trends and answer shape
-scraping/       Listing scrapers, location normaliser and the scrape-and-load runner
+scraping/       Scrapers, location normaliser, and the scrape-and-load runner
+scripts/        Windows scheduled-task scripts
 sql/            Base schema and numbered migrations
 frontend/       React web app and admin console
 tests/          Backend tests
 ```
 
-## API overview
+### API overview
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/api/chat` | Ask a question; returns a typed answer plus matching listings |
-| `POST` | `/api/chat/stream` | Same, as server-sent events |
-| `GET` | `/api/areas` | Areas with listing counts and typical rent |
-| `GET` | `/api/areas/{area}` | Rent by size and trend for one area |
-| `GET` | `/api/areas/{area}/guide` | Area guide with cited sources |
-| `GET` | `/api/areas/{area}/trends` | Weekly typical rent for a size |
-| `GET` | `/api/areas/{area}/listings` | Newest listings in an area |
+| `POST` | `/api/chat` | Ask a question (`session_id` = chat thread id); returns a typed answer plus matching listings |
+| `GET` | `/api/areas`, `/api/areas/{area}` | Areas with typical rent; one area's rent by size and trend |
+| `GET` | `/api/areas/{area}/guide`, `/trends`, `/listings` | Area guide with sources, weekly trend, newest listings |
 | `GET` | `/api/compare?areas=A,B,C&beds=2` | Side-by-side comparison |
-| `GET` `POST` `DELETE` | `/api/me/saved-searches`, `/api/me/favorites` | Per-device saved items (`X-Client-Id` header) |
+| `GET` `DELETE` | `/api/me/threads`, `/api/me/threads/{id}` | Chat history for this device |
+| `GET` `POST` `DELETE` | `/api/me/saved-searches`, `/api/me/favorites` | Saved items for this device |
 | `GET` | `/health` | Health check |
 
-Admin endpoints live under `/api/admin` and require an admin session.
+Per-device endpoints need an `X-Client-Id` header (a random UUID the browser keeps). Admin endpoints live under `/api/admin` and require an admin session.
 
-## Data notes
+### Data notes
 
 - Lagos rent is quoted per year. Monthly prices are multiplied by 12. A listing with no stated period is treated as yearly.
-- Ranges use the 10th to 90th percentile once there are 10 or more listings, and the lowest to highest price below that.
+- Ranges use the 10th to 90th percentile once there are 10 or more listings, and lowest to highest below that.
 - Confidence is *solid* at 10 or more listings, *limited* at 4 to 9, and *very little data* at 3 or fewer.
-- Some source listings tag a yearly price as monthly. The app flags these on listing cards and in the admin data-quality view.
-- No IP addresses or personal data are stored. Saved items are tied to a random per-device ID.
+- Some source listings tag a yearly price as monthly. These are flagged on listing cards and in the admin data-quality view.
