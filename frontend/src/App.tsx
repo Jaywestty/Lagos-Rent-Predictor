@@ -1,7 +1,9 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { BrowserRouter, Outlet, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Header } from "./components/layout/Header";
+import { Footer } from "./components/layout/Footer";
+import { ChromeContext } from "./lib/useSiteStats";
 import { Chat } from "./components/chat/Chat";
 import { useTheme } from "./hooks/useTheme";
 import { Skeleton } from "./components/states/States";
@@ -25,12 +27,17 @@ function Page({ children }: { children: React.ReactNode }) {
 }
 
 function PublicLayout({ theme, onToggle }: { theme: string; onToggle: () => void }) {
+  // A running chat fills the screen with its composer pinned at the bottom, so the footer steps aside.
+  const [chatActive, setChatActive] = useState(false);
+  const chrome = useMemo(() => ({ setChatActive }), []);
   return (
-    <>
-      <Header theme={theme} onToggle={onToggle} />
-      <main className="fade-in"><Outlet /></main>
-      <footer className="muted mx-auto max-w-[1080px] px-4 pb-8 text-[12px] md:px-10">Prices come from public listings on Nigerian property sites, refreshed weekly. Area notes are summarised from cited web sources.</footer>
-    </>
+    <ChromeContext.Provider value={chrome}>
+      <div className="flex min-h-screen flex-col">
+        <Header theme={theme} onToggle={onToggle} />
+        <main className="fade-in flex-1"><Outlet /></main>
+        {!chatActive && <Footer />}
+      </div>
+    </ChromeContext.Provider>
   );
 }
 
