@@ -3,32 +3,45 @@
 @tailwind utilities;
 
 :root {
-  --forest: #145c45;
-  --action: #21845f;
-  --soft: #e8f3ed;
-  --bg: #f7f8f6;
+  /* Quiet Ledger */
+  --forest: #0f4a37;
+  --action: #16624a;
+  --primary: #16624a;
+  --soft: #e8f1ec;
+  --sand: #f4ecdf;
+  --clay: #9a4a1f;
+  --bg: #f6f7f5;
   --surface: #ffffff;
   --elevated: #ffffff;
-  --text: #202923;
-  --secondary: #64716a;
-  --border: #d6ddd8;
-  --warn: #a66a13;
-  --danger: #b93838;
-  --primary: #21845f;
+  --text: #1b2420;
+  --secondary: #55635c;
+  --border: #e1e6e2;
+  --line: #eef1ef;
+  --warn: #8a5300;
+  --danger: #b42f2f;
 }
 .dark {
-  --bg: #101713;
-  --surface: #19231d;
-  --elevated: #202d25;
-  --text: #f1f5f2;
-  --secondary: #a6b5aa;
-  --border: #34443a;
+  --forest: #0b2e23;
+  --bg: #0f1513;
+  --surface: #161e1b;
+  --elevated: #1c2622;
+  --text: #edf2ef;
+  --secondary: #a3b1aa;
+  --border: #2a3631;
+  --line: #222c28;
   --warn: #e6b65d;
   --danger: #f08080;
-  --primary: #75c69c;
-  --soft: #202d25;
+  --primary: #6cc49b;
+  --action: #6cc49b;
+  --soft: #1f2a26;
+  --sand: #2a2620;
+  --clay: #e0a27f;
 }
-body { background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+.font-display, h1, h2 { font-family: "Space Grotesk", Inter, system-ui, sans-serif; letter-spacing: -0.01em; }
+.figure { font-family: "Space Grotesk", Inter, system-ui, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.ledger { background-image: repeating-linear-gradient(180deg, transparent 0 31px, var(--line) 31px 32px); }
+.kicker { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--secondary); }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
 @media (min-width: 768px) { .card { border-radius: 16px; } }
 .tabular { font-variant-numeric: tabular-nums; }
@@ -79,3 +92,47 @@ body { background: var(--bg); color: var(--text); font-family: Inter, system-ui,
 /* Scrape progress: sliding bar when the total is unknown. Off under reduced motion like everything else. */
 @keyframes indeterminate { 0% { left: -35% } 100% { left: 100% } }
 .indeterminate { animation: indeterminate 1.4s ease-in-out infinite; }
+
+/* Chat history drawer */
+@keyframes slideIn { from { transform: translateX(-100%) } to { transform: none } }
+.slide-in { animation: slideIn 220ms cubic-bezier(.2,.7,.2,1) both; }
+
+/* Welcome screen motion: one orchestrated entrance, then a slow live ticker. Off under reduced motion. */
+@keyframes wordUp { from { opacity: 0; transform: translateY(.45em) } to { opacity: 1; transform: none } }
+.word-up { display: inline-block; animation: wordUp 560ms cubic-bezier(.2,.7,.2,1) both; }
+@keyframes ticker { from { transform: translateX(0) } to { transform: translateX(-50%) } }
+.ticker-track { display: flex; width: max-content; animation: ticker 48s linear infinite; }
+.ticker:hover .ticker-track, .ticker:focus-within .ticker-track { animation-play-state: paused; }
+@keyframes drawLine { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+.draw-line { transform-origin: left; animation: drawLine 900ms cubic-bezier(.2,.7,.2,1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track { width: auto; flex-wrap: wrap; }
+}
+
+/* Adugbo mascot. Transforms use the SVG's own coordinates (view-box), so pivots sit at the shoulder and head. */
+:root { --scene: #cfe6db; }
+.dark { --scene: #1f3a30; }
+.m-root * { transform-box: view-box; }
+@keyframes mFloat { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+.m-float { animation: mFloat 4.2s ease-in-out infinite; }
+@keyframes mShadow { 0%,100% { transform: scaleX(1); opacity: .14 } 50% { transform: scaleX(.88); opacity: .09 } }
+.m-shadow { transform-origin: 120px 290px; animation: mShadow 4.2s ease-in-out infinite; }
+@keyframes mWave { 0% { transform: rotate(0) } 10% { transform: rotate(-20deg) } 20% { transform: rotate(6deg) } 30% { transform: rotate(-18deg) } 40% { transform: rotate(4deg) } 50%,100% { transform: rotate(0) } }
+.m-wave { transform-origin: 78px 170px; animation: mWave 2.8s ease-in-out infinite; }
+@keyframes mSparks { 0%,8% { opacity: 0; transform: scale(.6) } 15%,38% { opacity: 1; transform: scale(1) } 50%,100% { opacity: 0; transform: scale(.8) } }
+.m-sparks { transform-origin: 0px 90px; animation: mSparks 2.8s ease-in-out infinite; }
+@keyframes mBlink { 0%,90%,100% { transform: scaleY(1) } 93% { transform: scaleY(.12) } }
+.m-eyes { transform-origin: 120px 106px; animation: mBlink 4.6s infinite; }
+@keyframes mPin { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-5px) } }
+.m-pin { animation: mPin 2.2s ease-in-out infinite; }
+@keyframes mHead { 0%,100% { transform: rotate(0) } 50% { transform: rotate(-2.5deg) } }
+.m-head { transform-origin: 120px 160px; animation: mHead 4.2s ease-in-out infinite; }
+@keyframes mLook { 0%,100% { transform: translateX(-5px) } 50% { transform: translateX(5px) } }
+.m-look { animation: mLook 1.6s ease-in-out infinite; }
+@keyframes mDot { 0%,60%,100% { opacity: .25 } 30% { opacity: 1 } }
+.m-dots circle { animation: mDot 1.2s infinite; }
+.m-dots circle:nth-child(2) { animation-delay: .2s } .m-dots circle:nth-child(3) { animation-delay: .4s }
+@keyframes mEnter { from { opacity: 0; transform: translateY(18px) scale(.94) } to { opacity: 1; transform: none } }
+.m-enter { animation: mEnter 700ms cubic-bezier(.2,.8,.2,1.1) both; }
+@keyframes bubbleIn { from { opacity: 0; transform: translateY(6px) scale(.96) } to { opacity: 1; transform: none } }
+.bubble-in { animation: bubbleIn 420ms cubic-bezier(.2,.8,.2,1) both; }

@@ -22,7 +22,7 @@ export function Compare() {
   const areas = useQuery({ queryKey: ["areas"], queryFn: getAreas, staleTime: 5 * 60_000 });
   const cmp = useQuery({ queryKey: ["compare", picked.join(","), beds], queryFn: () => getCompare(picked, beds || null), enabled: picked.length >= 2 });
 
-  useEffect(() => { document.title = "Compare areas · Lagos Rent"; }, []);
+  useEffect(() => { document.title = "Compare areas · Adugbo AI"; }, []);
 
   function setPicked(next: string[]) {
     const p = new URLSearchParams(params);

@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
-import { ask, getAreas, newRequestKey, track } from "../../services/api";
-import { RentAnswer } from "../rent/RentAnswer";
-import { ListingGrid } from "../rent/ListingCard";
-import { AdviceAnswer } from "../rent/AdviceAnswer";
-import { ErrorState, LoadingState, NoDataState, OutOfScopeState } from "../states/States";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
+import { ask, type AskResult, getAreas, getThread, newRequestKey, newThreadId, track } from "../../services/api";
+import { useChrome } from "../../lib/useSiteStats";
+import { LoadingState } from "../states/States";
+import { AnswerView } from "./AnswerView";
+import { ChatHistory, ChatList, useThreads } from "./ChatHistory";
+import { Welcome } from "./Welcome";
 
-const PLACEHOLDERS = ["Try: How much is rent in Gbagada?", "Try: 2 bedroom in Yaba", "Try: self contain in Lekki", "Try: rent in Ikoyi"];
+const PLACEHOLDERS = ["Try: rent in Gbagada", "Try: 2 bedroom in Yaba", "Try: self contain in Lekki", "Try: rent in Ikoyi"];
 const BEDS = [
   { label: "Self contain", text: "self contain" },
   { label: "1 bed", text: "1 bedroom" },
@@ -29,150 +30,219 @@ function buildQuestion(area: string | null, beds: string | null, budget: number 
   return beds ? `${what} rent${where}` : `How much is rent${where}?`;
 }
 
+type Exchange = { key: string; question: string; state: "pending" | "done" | "error"; result?: AskResult };
+
+function PlusIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12h14" /></svg>;
+}
+
 export function Chat() {
+  const qc = useQueryClient();
+  const { setChatActive } = useChrome();
+  const [params, setParams] = useSearchParams();
+  const urlThread = params.get("c");
+  const [threadId, setThreadId] = useState<string>(() => urlThread || newThreadId());
+  const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const [question, setQuestion] = useState("");
-  const [sessionId] = useState<string | null>(() => {
-    try { return localStorage.getItem("lagos-session"); } catch { return null; }
-  });
-  const [requestKey, setRequestKey] = useState(newRequestKey());
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
-  const [submitted, setSubmitted] = useState<string | null>(null);
   const [area, setArea] = useState<string | null>(null);
   const [beds, setBeds] = useState<string | null>(null);
   const [budget, setBudget] = useState<number | null>(null);
   const [stage, setStage] = useState(0);
-  const [params, setParams] = useSearchParams();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const bottom = useRef<HTMLDivElement>(null);
 
   const areas = useQuery({ queryKey: ["areas"], queryFn: getAreas, staleTime: 5 * 60_000, retry: false });
   const areaChips = (areas.data?.map((a) => a.area) ?? FALLBACK_AREAS).slice(0, 8);
+  const threads = useThreads();
 
-  const query = useQuery({
-    queryKey: ["ask", submitted, requestKey],
-    queryFn: () => ask(submitted!, sessionId, requestKey),
-    enabled: Boolean(submitted),
-    retry: false,
-  });
-
+  // Opening a saved chat (?c=<id>): load its questions and answers.
+  const saved = useQuery({ queryKey: ["thread", urlThread], queryFn: () => getThread(urlThread!), enabled: Boolean(urlThread), retry: false });
   useEffect(() => {
-    if (!query.isFetching) return;
+    if (!urlThread) return;
+    setThreadId(urlThread);
+    if (saved.data) {
+      setExchanges(saved.data.messages.map((m) => ({
+        key: `saved-${m.id}`, question: m.question, state: "done",
+        result: { answer: m.payload.answer, listings: m.payload.listings || [], advice: m.payload.advice ?? null },
+      })));
+    }
+  }, [urlThread, saved.data]);
+
+  const pending = exchanges.some((e) => e.state === "pending");
+  useEffect(() => {
+    if (!pending) return;
     setStage(0);
     const timers = [setTimeout(() => setStage(1), 1200), setTimeout(() => setStage(2), 3000)];
     return () => timers.forEach(clearTimeout);
-  }, [query.isFetching, requestKey]);
+  }, [pending]);
 
+  useEffect(() => {
+    if (exchanges.length) bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [exchanges.length, pending]);
+
+  const inChat = exchanges.length > 0 || Boolean(urlThread);
+  useEffect(() => { setChatActive(inChat); return () => setChatActive(false); }, [inChat, setChatActive]);
+
+  const run = useCallback(async (key: string, text: string, tid: string) => {
+    try {
+      const result = await ask(text, tid, newRequestKey());
+      setExchanges((xs) => xs.map((x) => (x.key === key ? { ...x, state: "done", result } : x)));
+      // The first real answer creates the chat on the server (errors are not saved): put it in the
+      // address so refresh or history reopens it.
+      if (result.answer && !["error", "out_of_scope"].includes(result.answer.status)) {
+        if (!params.get("c")) setParams({ c: tid }, { replace: true });
+        qc.invalidateQueries({ queryKey: ["threads"] });
+      }
+    } catch {
+      setExchanges((xs) => xs.map((x) => (x.key === key ? { ...x, state: "error" } : x)));
+    }
+  }, [params, setParams, qc]);
+
+  const submit = useCallback((q: string) => {
+    const text = q.trim();
+    if (!text || pending) return;
+    const key = newRequestKey();
+    setExchanges((xs) => [...xs, { key, question: text, state: "pending" }]);
+    setQuestion("");
+    void run(key, text, threadId);
+  }, [pending, run, threadId]);
+
+  // ?q=<question> (from saved searches): ask it in a fresh chat.
   useEffect(() => {
     const q = params.get("q");
     if (q) {
-      submit(q);
       setParams({}, { replace: true });
+      submit(q);
     }
   }, []);
 
-  function submit(q: string) {
-    const text = q.trim();
-    if (!text) return;
-    try { if (!sessionId) localStorage.setItem("lagos-session", crypto.randomUUID()); } catch { /* private mode */ }
-    setRequestKey(newRequestKey());
-    setSubmitted(text);
-    setQuestion("");
+  function retry(x: Exchange) {
+    setExchanges((xs) => xs.map((e) => (e.key === x.key ? { ...e, state: "pending" } : e)));
+    void run(x.key, x.question, threadId);
+  }
+
+  function newChat() {
+    setExchanges([]);
+    setThreadId(newThreadId());
+    setParams({}, { replace: true });
+  }
+
+  function openChat(id: string) {
+    if (id === threadId && exchanges.length) return;
+    setExchanges([]);
+    setParams({ c: id }, { replace: false });
   }
 
   function pick<T>(current: T | null, next: T, set: (v: T | null) => void, kind: string) {
-    const value = current === next ? null : next;
-    set(value);
+    set(current === next ? null : next);
     track("chip_click", { kind });
   }
 
-  const data = query.data;
-  const answer = data?.answer;
   const hasFilters = Boolean(area || beds || budget);
   const stages = ["Reading your question...", `Checking ${area ? `${area} ` : ""}listings...`, "Working out the price range..."];
+  const title = exchanges[0]?.question || saved.data?.title || "New chat";
+
+  const composer = (
+    <form className="flex items-center gap-2 rounded-2xl border p-1.5 shadow-[0_8px_24px_rgba(27,36,32,.06)]" style={{ background: "var(--surface)", borderColor: "var(--border)" }}
+      onSubmit={(e) => { e.preventDefault(); submit(question); }} aria-label="Ask about rent">
+      <input
+        aria-label="Your question"
+        value={question}
+        onChange={(e) => setQuestion(e.target.value)}
+        placeholder={inChat ? "Ask a follow-up" : PLACEHOLDERS[placeholderIdx % PLACEHOLDERS.length]}
+        onFocus={() => setPlaceholderIdx((i) => i + 1)}
+        className="h-12 min-w-0 flex-1 bg-transparent px-3 text-[16px] outline-none md:h-14"
+        style={{ color: "var(--text)" }}
+      />
+      <button type="submit" className="btn h-12 min-w-[76px] md:h-14 md:min-w-[110px]" disabled={pending}>{pending ? "…" : "Ask"}</button>
+    </form>
+  );
+
+  const quickSearch = (
+    <div className="space-y-3" aria-label="Quick search">
+      {[
+        { label: "Area", items: areaChips.map((a) => ({ key: a, text: a, on: area === a, click: () => pick(area, a, setArea, "area") })) },
+        { label: "Size", items: BEDS.map((b) => ({ key: b.text, text: b.label, on: beds === b.text, click: () => pick(beds, b.text, setBeds, "beds") })) },
+        { label: "Budget", items: BUDGETS.map((b) => ({ key: String(b.value), text: b.label, on: budget === b.value, click: () => pick(budget, b.value, setBudget, "budget") })) },
+      ].map((row) => (
+        <div key={row.label} className="flex flex-wrap items-center gap-2" role="group" aria-label={row.label}>
+          <span className="kicker w-16 text-[11px]">{row.label}</span>
+          {row.items.map((i) => <button key={i.key} type="button" className="chip" aria-pressed={i.on} onClick={i.click}>{i.text}</button>)}
+        </div>
+      ))}
+      {hasFilters && (
+        <div className="fade-in flex flex-wrap items-center gap-2 sm:pl-[72px]">
+          <button type="button" className="btn" onClick={() => submit(buildQuestion(area, beds, budget))}>Search: {buildQuestion(area, beds, budget)}</button>
+          <button type="button" className="btn-ghost" onClick={() => { setArea(null); setBeds(null); setBudget(null); }}>Clear</button>
+        </div>
+      )}
+    </div>
+  );
+
+  const historyDrawer = <ChatHistory open={historyOpen} onClose={() => setHistoryOpen(false)} activeId={inChat ? threadId : null} onOpen={openChat} onNew={newChat} />;
+
+  if (!inChat) {
+    return (
+      <>
+        {historyDrawer}
+        <Welcome composer={composer} quickSearch={quickSearch} onAsk={submit} chatCount={threads.data?.length ?? 0} onOpenChats={() => setHistoryOpen(true)} />
+      </>
+    );
+  }
 
   return (
-    <div className="mx-auto w-full max-w-[1080px] px-4 md:px-10">
-      <section className="stagger pt-6 md:pt-10">
-        <h1 className="text-[28px] font-bold leading-tight md:text-[34px]">Rent in Lagos, priced from real listings.</h1>
-        <p className="muted mt-2 max-w-[620px] text-[15px]">Ask like you talk. We show the typical rent, the price range and how many listings back it, all from listings posted in the last few weeks.</p>
-      </section>
+    <div className="mx-auto flex w-full max-w-[1200px]" style={{ minHeight: "calc(100vh - 64px)" }}>
+      {historyDrawer}
+      {/* Desktop: chats stay in view. */}
+      <aside aria-label="Your chats" className="sticky top-[64px] hidden h-[calc(100vh-64px)] w-[280px] shrink-0 flex-col gap-3 border-r px-3 py-5 lg:flex" style={{ borderColor: "var(--border)" }}>
+        <button type="button" className="btn inline-flex items-center justify-center gap-2" onClick={newChat}><PlusIcon />New chat</button>
+        <ChatList activeId={threadId} onOpen={openChat} onNew={newChat} />
+      </aside>
 
-      <form className="card mt-5 flex items-center gap-2 p-2" onSubmit={(e) => { e.preventDefault(); submit(question); }} aria-label="Ask about rent">
-        <input
-          aria-label="Your question"
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder={PLACEHOLDERS[placeholderIdx % PLACEHOLDERS.length]}
-          onFocus={() => setPlaceholderIdx((i) => i + 1)}
-          className="h-[52px] min-w-0 flex-1 rounded bg-transparent px-3 text-[15px] outline-none md:h-14"
-          style={{ color: "var(--text)" }}
-        />
-        <button type="submit" className="btn md:min-w-[120px]">Ask</button>
-      </form>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Phone/tablet: a compact bar with the chat title. */}
+        <div className="sticky top-[64px] z-10 flex items-center gap-2 border-b px-3 py-2 backdrop-blur lg:hidden" style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--bg) 92%, transparent)" }}>
+          <button type="button" className="btn-ghost grid w-11 place-items-center px-0" aria-label="Your chats" aria-haspopup="dialog" onClick={() => setHistoryOpen(true)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+          </button>
+          <p className="font-display min-w-0 flex-1 truncate text-center text-[15px] font-bold">{title}</p>
+          <button type="button" className="btn grid w-11 place-items-center px-0" aria-label="New chat" onClick={newChat}><PlusIcon /></button>
+        </div>
 
-      <section className="mt-4 space-y-3" aria-label="Quick search">
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Area">
-          <span className="muted w-16 text-[12px] font-semibold uppercase tracking-wide">Area</span>
-          {areaChips.map((a) => <button key={a} type="button" className="chip" aria-pressed={area === a} onClick={() => pick(area, a, setArea, "area")}>{a}</button>)}
-        </div>
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Size">
-          <span className="muted w-16 text-[12px] font-semibold uppercase tracking-wide">Size</span>
-          {BEDS.map((b) => <button key={b.text} type="button" className="chip" aria-pressed={beds === b.text} onClick={() => pick(beds, b.text, setBeds, "beds")}>{b.label}</button>)}
-        </div>
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Budget">
-          <span className="muted w-16 text-[12px] font-semibold uppercase tracking-wide">Budget</span>
-          {BUDGETS.map((b) => <button key={b.value} type="button" className="chip" aria-pressed={budget === b.value} onClick={() => pick(budget, b.value, setBudget, "budget")}>{b.label}</button>)}
-        </div>
-        {hasFilters && (
-          <div className="fade-in flex flex-wrap items-center gap-2 pl-0 md:pl-[72px]">
-            <button type="button" className="btn" onClick={() => submit(buildQuestion(area, beds, budget))}>Search: {buildQuestion(area, beds, budget)}</button>
-            <button type="button" className="btn-ghost" onClick={() => { setArea(null); setBeds(null); setBudget(null); }}>Clear</button>
-          </div>
-        )}
-      </section>
-
-      <div className="mt-6 space-y-4 pb-12" aria-live="polite">
-        {submitted && (query.isFetching || answer) && <p className="muted text-[13px]">You asked: <span style={{ color: "var(--text)" }}>{submitted}</span></p>}
-        {query.isFetching && <LoadingState text={stages[stage]} />}
-        {query.isError && !query.isFetching && <ErrorState message="Network error. Your question is preserved." onRetry={() => setRequestKey(newRequestKey())} />}
-        {!query.isFetching && data?.advice && <AdviceAnswer advice={data.advice} />}
-        {!query.isFetching && answer && !data?.advice && (answer.status === "success" || answer.status === "low_data") && (
-          <>
-            {answer.status === "low_data" && <p className="card fade-in p-4 text-[14px]" role="note"><strong>Low data:</strong> this estimate rests on very few listings. Treat it as a rough guide.</p>}
-            <RentAnswer answer={answer} question={submitted ?? undefined} onAsk={submit} />
-            {data.listings.length > 0 && (
-              <section aria-label="Matching listings" className="fade-in">
-                <h2 className="mb-3 text-[17px] font-semibold">Listings behind this answer</h2>
-                <ListingGrid listings={data.listings.slice(0, 9)} />
-              </section>
-            )}
-          </>
-        )}
-        {!query.isFetching && answer?.status === "no_data" && <NoDataState suggestions={areaChips.slice(0, 4)} onPick={(a) => submit(`How much is rent in ${a}?`)} />}
-        {!query.isFetching && answer?.status === "out_of_scope" && <OutOfScopeState />}
-        {!query.isFetching && answer?.status === "error" && <ErrorState message={answer.message || "Something failed on our side."} onRetry={() => setRequestKey(newRequestKey())} />}
-        {!query.isFetching && answer?.status === "clarification" && (
-          <section className="card rise p-6" aria-label="Clarification">
-            <h2 className="text-[17px] font-semibold">{answer.clarification?.question || "Which area?"}</h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {(answer.clarification?.options?.length ? answer.clarification.options : areaChips.slice(0, 4)).map((opt) => (
-                <button key={opt} type="button" onClick={() => submit(`${opt} rent`)} className="chip">{opt}</button>
-              ))}
-            </div>
-          </section>
-        )}
-        {!submitted && (
-          <section className="stagger grid gap-3 pt-2 sm:grid-cols-3" aria-label="What you can do">
-            {[
-              { t: "Area guides", d: "Commute, flooding, power and safety, with sources.", href: "/areas" },
-              { t: "Compare areas", d: "Side-by-side rent for up to three areas.", href: "/compare" },
-              { t: "Move-in cost", d: "Rent plus agency, legal and caution fees.", href: "/move-in" },
-            ].map((c) => (
-              <Link key={c.href} to={c.href} className="card lift block p-4">
-                <p className="text-[15px] font-semibold">{c.t} →</p>
-                <p className="muted mt-1 text-[13px]">{c.d}</p>
-              </Link>
+        <div className="mx-auto w-full max-w-[860px] flex-1 px-4 pb-4 pt-6 md:px-8">
+          {saved.isPending && urlThread && !exchanges.length && <LoadingState text="Opening your chat..." />}
+          {saved.isError && !exchanges.length && (
+            <section className="card p-6" role="alert">
+              <h2 className="text-[19px] font-bold">Chat not found</h2>
+              <p className="muted mt-1 text-[14px]">It may have been deleted, or it was started on another device.</p>
+              <button type="button" className="btn mt-3" onClick={newChat}>Start a new chat</button>
+            </section>
+          )}
+          <ol className="space-y-10" aria-live="polite">
+            {exchanges.map((x) => (
+              <li key={x.key} className="space-y-4">
+                <div className="flex justify-end">
+                  <p className="fade-in max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-[15px]" style={{ background: "var(--soft)" }}>{x.question}</p>
+                </div>
+                {x.state === "pending" && <LoadingState text={stages[stage]} />}
+                {x.state === "error" && (
+                  <section className="card p-5" role="alert">
+                    <p className="text-[15px] font-semibold">That did not go through.</p>
+                    <p className="muted mt-1 text-[14px]">Check your connection. Your question is kept.</p>
+                    <button type="button" className="btn mt-3" onClick={() => retry(x)}>Try again</button>
+                  </section>
+                )}
+                {x.state === "done" && x.result && <AnswerView result={x.result} question={x.question} onAsk={submit} onRetry={() => retry(x)} suggestions={areaChips} />}
+              </li>
             ))}
-          </section>
-        )}
+          </ol>
+          <div ref={bottom} />
+        </div>
+
+        <div className="sticky bottom-0 z-10 px-4 pb-4 pt-3 md:px-8" style={{ background: "linear-gradient(180deg, transparent, var(--bg) 35%)", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}>
+          <div className="mx-auto max-w-[860px]">{composer}</div>
+        </div>
       </div>
     </div>
   );

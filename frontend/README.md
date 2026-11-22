@@ -1,6 +1,6 @@
-# Lagos Rent web app
+# Adugbo AI web app
 
-React 19 + TypeScript + Vite front end for Lagos Rent. See the [root README](../README.md) for setup.
+React 19 + TypeScript + Vite front end for Adugbo AI. See the [root README](../README.md) for setup.
 
 ```bash
 npm install

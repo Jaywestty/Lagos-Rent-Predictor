@@ -21,7 +21,13 @@ export type ChatAnswer = {
   request_id: string;
   latency_ms: number;
   message: string;
+  comparison?: { options: ComparisonOptionStat[] } | null;
+  budget?: BudgetInfo | null;
+  no_data?: NoDataHelp | null;
 };
+export type NoDataHelp = { area: string | null; covered?: boolean; area_listings?: number; did_you_mean?: string | null; suggestions?: string[] };
+export type ComparisonOptionStat = { label: string; area: string | null; beds: number | null; property_type: string | null; median: number | null; min: number | null; max: number | null; count: number; confidence: "normal" | "limited" | "insufficient"; caveat: string | null };
+export type BudgetInfo = { amount: number; period: "year" | "month"; yearly: number; within_count: number; areas: { area: string; count: number }[]; stretch_count: number };
 export type SseEvent =
   | { type: "status"; request_id: string; text: string }
   | { type: "delta"; request_id: string; text: string }
@@ -69,3 +75,6 @@ export type AreaGuide = {
 export type CompareResult = { bucket: string; label: string; areas: (AreaStats & { focus: Summary | null; trend: Trend })[] };
 export type SavedSearch = { id: number; label: string; query: string | null; area: string | null; bedrooms: number | null; max_budget_ngn: number | null; created_at: string; current?: { listing_count: number; median_ngn: number | null; data_as_of: string | null } };
 export type Favorite = { id: number; url: string; title: string | null; price_text: string | null; annual_price_ngn: number | null; area: string | null; bedrooms: number | null; source: string | null; created_at: string; still_listed: boolean; listed_at: string | null };
+export type ChatThreadSummary = { id: string; title: string; message_count: number; created_at: string; updated_at: string; last_question: string | null };
+export type ChatThreadMessage = { id: number; question: string; created_at: string; payload: { answer: ChatAnswer; listings: Listing[]; advice?: { text: string; sources: { title: string; url: string }[] } } };
+export type ChatThread = { id: string; title: string; message_count: number; created_at: string; updated_at: string; messages: ChatThreadMessage[] };

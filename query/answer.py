@@ -51,6 +51,8 @@ class ChatAnswer(BaseModel):
     latency_ms: float = 0.0
     message: str = ""
     comparison: dict | None = None
+    budget: dict | None = None
+    no_data: dict | None = None
 
 
 def compute_contract(values_by_bucket, all_values, area=None, location=None, property_type=None, data_as_of=None, request_id="", latency_ms=0.0):

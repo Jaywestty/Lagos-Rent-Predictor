@@ -88,3 +88,17 @@ export const deleteFavorite = (id: number) => call<{ ok: boolean }>(`/api/me/fav
 export function track(feature: string, detail: Record<string, string | number | boolean | null> = {}) {
   call("/api/events", { method: "POST", body: JSON.stringify({ feature, detail }) }).catch(() => undefined);
 }
+
+// Chat history (per device)
+export const getThreads = () => call<{ items: import("../types/api").ChatThreadSummary[] }>("/api/me/threads").then((r) => r.items);
+export const getThread = (id: string) => call<import("../types/api").ChatThread>(`/api/me/threads/${encodeURIComponent(id)}`);
+export const deleteThread = (id: string) => call<{ ok: boolean }>(`/api/me/threads/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const deleteAllThreads = () => call<{ ok: boolean; deleted: number }>("/api/me/threads", { method: "DELETE" });
+
+export function newThreadId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (Number(c) ^ (Math.random() * 16) >> (Number(c) / 4)).toString(16));
+  }
+}

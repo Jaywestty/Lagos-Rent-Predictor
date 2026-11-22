@@ -1,6 +1,7 @@
 import asyncio
 import contextvars
 import json
+import os
 import re
 import time
 import uuid
@@ -27,19 +28,29 @@ logger.add("logs/app.log", rotation="10 MB", retention="14 days", level="INFO")
 
 @asynccontextmanager
 async def _lifespan(_app):
-    # Admin-started scrapes run inside this process, so any still marked running from a
-    # previous start died with that process. Close them so admin never shows a ghost run.
+    # Close scrape runs whose heartbeat has gone silent (for example killed by a previous restart),
+    # so admin never shows a ghost run. Heartbeat-based, so it is safe with several servers.
     try:
-        from scraping.runner import close_orphaned_admin_runs
+        from scraping.runner import mark_interrupted_runs
 
-        await asyncio.get_running_loop().run_in_executor(None, close_orphaned_admin_runs)
+        await asyncio.get_running_loop().run_in_executor(None, mark_interrupted_runs)
     except Exception as exc:
         logger.warning("could not close orphaned scrape runs: {}", exc)
     yield
 
 
-app = FastAPI(title="Lagos House Hunter AI", lifespan=_lifespan)
+app = FastAPI(title="Adugbo AI", lifespan=_lifespan)
 install_http_middleware(app)
+
+# Optional: only needed when a browser on another origin calls this API directly (for example
+# VITE_API_BASE_URL pointing at Render). The recommended Vercel setup proxies /api instead.
+_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+if _origins:
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_credentials=True,
+                       allow_methods=["GET", "POST", "PATCH", "DELETE"],
+                       allow_headers=["Content-Type", "X-Client-Id", "X-Request-Key", "X-CSRF-Token", "X-Request-Id"])
 
 from entrypoints.public_api import router as public_router  # noqa: E402
 
@@ -89,6 +100,16 @@ def _enrich_with_contract(legacy: dict, entities, request_id: str, latency_ms: f
     payload = legacy if isinstance(legacy, dict) else {"message": str(legacy)}
     payload["answer"] = contract.model_dump(mode="json")
     payload["answer"]["message"] = payload.get("message", "")
+    if entities.query_type == QueryType.COMPARISON:
+        comparison = _comparison_contract(entities)
+        payload["answer"]["comparison"] = comparison
+        counts = [o["count"] for o in (comparison or {}).get("options", [])]
+        payload["answer"]["status"] = "success" if any(counts) else "no_data"
+        payload["answer"]["listing_count"] = sum(counts)
+    if entities.query_type == QueryType.AFFORDABILITY:
+        payload["answer"]["budget"] = _budget_contract(payload, entities)
+    if payload["answer"].get("status") == "no_data":
+        payload["answer"]["no_data"] = _no_data_help(entities)
     is_sale = bool(entities.listing_type and entities.listing_type.value == "sale")
     if is_sale:
         payload["answer"]["status"] = "out_of_scope"
@@ -103,8 +124,118 @@ def _enrich_with_contract(legacy: dict, entities, request_id: str, latency_ms: f
     return payload
 
 
+MAX_QUESTION_CHARS = 400
+OUT_OF_SCOPE_MESSAGE = (
+    "I'm Adugbo AI, and I can only help with renting in Lagos: prices by area and size, budgets, comparing areas, "
+    "and practical renting advice. Try something like \"2 bedroom rent in Yaba\"."
+)
+# Obvious attempts to override the assistant. Caught before any AI call, so they cost nothing.
+_INJECTION = re.compile(
+    r"((ignore|disregard|forget|override) (?:(?:all|any|the|your|my|of|these|those|previous|prior|above|earlier)\s+){0,4}"
+    r"(instructions|prompts?|rules|guidelines)"
+    r"|(reveal|show|print|repeat|leak) (me )?(your|the) (system )?(prompt|instructions|rules)"
+    r"|system prompt|developer mode|jailbreak|you are now|pretend (to be|you are)|act as (an?|my) )",
+    re.IGNORECASE,
+)
+
+
+def _out_of_scope_payload(request_id: str, latency_ms: float, message: str = OUT_OF_SCOPE_MESSAGE) -> dict:
+    payload = _error_payload(message, request_id, latency_ms, "out_of_scope")
+    payload["query_type"] = "out_of_scope"
+    return payload
+
+
+def _comparison_contract(entities) -> dict | None:
+    """Side-by-side figures for each option in a comparison, all from listings."""
+    from query.stats import classify, summarize_values
+
+    options = []
+    for opt in entities.comparison_options or []:
+        try:
+            stats = fetch_rent_stats(area=opt.area, beds=opt.beds, property_type=opt.property_type)
+        except Exception as exc:
+            logger.warning("comparison stats failed for {}: {}", opt.label, exc)
+            continue
+        summary = summarize_values(stats["all_values"]) if stats["all_values"] else None
+        _, confidence = classify(len(stats["all_values"]))
+        region_only = opt.area is None and any(t in opt.label.lower() for t in ("mainland", "island"))
+        options.append({
+            "label": opt.label,
+            "area": stats.get("area") or opt.area,
+            "beds": opt.beds,
+            "property_type": opt.property_type,
+            "median": summary["median"] if summary else None,
+            "min": summary["min"] if summary else None,
+            "max": summary["max"] if summary else None,
+            "count": summary["count"] if summary else 0,
+            "confidence": confidence,
+            "caveat": "Area-level only: there is no mainland/island filter, so this covers all of Lagos for this size." if region_only else None,
+        })
+    return {"options": options} if options else None
+
+
+def _no_data_help(entities) -> dict:
+    """Why a search found nothing, and what to try instead: a spelling fix, other sizes in the
+    same area, or the busiest covered areas. Everything here comes from the listings table."""
+    from rapidfuzz import fuzz, process
+
+    from query.market import list_areas
+
+    asked = (entities.area or "").strip()
+    try:
+        covered = list_areas()
+    except Exception as exc:
+        logger.warning("no-data help unavailable: {}", exc)
+        return {"area": asked or None}
+    names = [a["area"] for a in covered]
+    by_name = {a["area"].lower(): a for a in covered}
+    help_: dict = {"area": asked or None, "covered": False, "area_listings": 0, "did_you_mean": None,
+                   "suggestions": names[:6]}
+    if asked:
+        exact = by_name.get(asked.lower())
+        if exact:
+            help_["covered"] = True
+            help_["area"] = exact["area"]
+            help_["area_listings"] = exact["listing_count"]
+        else:
+            match = process.extractOne(asked, names, scorer=fuzz.WRatio, score_cutoff=86)
+            if match and match[0].lower() != asked.lower():
+                help_["did_you_mean"] = match[0]
+    return help_
+
+
+def _budget_contract(legacy: dict, entities) -> dict | None:
+    from query.query_engine import annual_budget
+
+    yearly = annual_budget(entities)
+    if yearly is None:
+        return None
+    period = getattr(entities.budget_period, "value", entities.budget_period)
+    areas = [{"area": a.get("area"), "count": a.get("matched_count", 0)} for a in legacy.get("areas") or []]
+    stretch = sum(len(s.get("results") or []) for s in legacy.get("stretch_options") or [])
+    return {
+        "amount": float(entities.budget_ngn),
+        "period": period,
+        "yearly": yearly,
+        "within_count": int(legacy.get("matched_count") or 0),
+        "areas": areas[:6],
+        "stretch_count": stretch,
+    }
+
+
 _PRICE_QUESTION = re.compile(r"\b(how much|price|prices|cost|rent|rents|budget|afford|cheap|expensive)\b", re.IGNORECASE)
 _BEDS_IN_TEXT = re.compile(r"\b([1-9])\s*-?\s*(?:bed|bedroom|bedrooms|br)\b", re.IGNORECASE)
+
+
+def _area_named_in(question: str) -> str | None:
+    """A known Lagos area mentioned in the text, longest names first ("Victoria Island" before "Island")."""
+    from scraping.location_normalizer import KNOWN_AREAS
+
+    text = f" {(question or '').lower()} "
+    for area in sorted(KNOWN_AREAS, key=len, reverse=True):
+        if re.search(rf"(?<![a-z]){re.escape(area.lower())}(?![a-z])", text):
+            return area
+    return None
 
 
 def _route_price_questions_to_listings(question: str, entities):
@@ -113,9 +244,12 @@ def _route_price_questions_to_listings(question: str, entities):
     The extractor sometimes labels "how much is a 2 bedroom in Lekki?" as advice; web results then
     quote sale prices or stale figures. Rent figures must stay traceable to listings.
     """
-    if entities.query_type != QueryType.ADVICE or not entities.area or not _PRICE_QUESTION.search(question or ""):
+    if entities.query_type != QueryType.ADVICE or not _PRICE_QUESTION.search(question or ""):
         return entities
-    update = {"query_type": QueryType.LOOKUP}
+    area = entities.area or _area_named_in(question)
+    if not area:
+        return entities
+    update: dict = {"query_type": QueryType.LOOKUP, "area": area}
     if entities.beds is None:
         m = _BEDS_IN_TEXT.search(question)
         if m:
@@ -138,6 +272,15 @@ def query_listings(request: QueryRequest, http_request: Request):
     key = _resolve_key(request, http_request.headers)
     if key and key in _idempotency_cache:
         return _idempotency_cache[key]
+    question = (request.query or "").strip()
+    if not question:
+        return _error_payload("Type a question about rent in Lagos.", request_id, (time.perf_counter() - t0) * 1000, "clarification")
+    if len(question) > MAX_QUESTION_CHARS:
+        return _error_payload(f"Please keep your question under {MAX_QUESTION_CHARS} characters.", request_id,
+                              (time.perf_counter() - t0) * 1000, "clarification")
+    if _INJECTION.search(question):
+        logger.info("Blocked instruction-override attempt: {}", question[:120])
+        return _out_of_scope_payload(request_id, (time.perf_counter() - t0) * 1000)
     start_trace()
     previous_entities = load_session_entities(request.session_id) if request.session_id else None
     try:
@@ -151,9 +294,17 @@ def query_listings(request: QueryRequest, http_request: Request):
         if key:
             _idempotency_cache[key] = payload
         return payload
+    except Exception as exc:
+        # The AI service is unreachable or failed (network, outage, rate limit). Not cached, so a retry works.
+        latency_ms = (time.perf_counter() - t0) * 1000
+        logger.error("Entity extraction service failed for query='{}': {}", request.query, exc)
+        return _error_payload("We couldn't reach the service that reads your question. Please try again in a moment.",
+                              request_id, latency_ms, "error")
     if not request.query or not str(request.query).strip():
         latency_ms = (time.perf_counter() - t0) * 1000
         return _error_payload("Query text is empty.", request_id, latency_ms, "clarification")
+    if entities.query_type == QueryType.OUT_OF_SCOPE:
+        return _out_of_scope_payload(request_id, (time.perf_counter() - t0) * 1000)
     entities = _route_price_questions_to_listings(request.query, entities)
     query_type_value = entities.query_type.value
     try:
@@ -172,6 +323,8 @@ def query_listings(request: QueryRequest, http_request: Request):
         elif entities.query_type == QueryType.ADVICE:
             with trace_stage("advice_synthesis", query_type_value):
                 result = answer_advice_query(entities.resolved_query or request.query)
+            if isinstance(result, dict) and result.get("query_type") == "out_of_scope":
+                return _out_of_scope_payload(request_id, (time.perf_counter() - t0) * 1000)
         else:
             latency_ms = (time.perf_counter() - t0) * 1000
             return _error_payload(f"Query type '{entities.query_type.value}' is not supported.", request_id, latency_ms, "out_of_scope")
@@ -215,6 +368,13 @@ def query_listings(request: QueryRequest, http_request: Request):
         )
     except Exception as exc:
         logger.warning("question log failed: {}", exc)
+    try:
+        # Chat history: the session id doubles as the thread id; the device id owns the thread.
+        from conversation.history import save_exchange
+
+        save_exchange(http_request.headers.get("x-client-id"), request.session_id, request.query, payload)
+    except Exception as exc:
+        logger.warning("chat history save failed: {}", exc)
     if key:
         _idempotency_cache[key] = payload
     return payload

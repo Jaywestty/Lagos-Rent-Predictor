@@ -1,0 +1,27 @@
+# Render Blueprint for the Adugbo AI API (FastAPI).
+# New > Blueprint in the Render dashboard, pick this repository, then fill in the secret values.
+services:
+  - type: web
+    name: adugbo-ai-api
+    runtime: python
+    plan: free
+    region: frankfurt # close to the Supabase eu-central-1 database
+    branch: main
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run --no-dev uvicorn entrypoints.api:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips "*"
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      # Only needed if the browser calls the API directly instead of through the Vercel rewrite.
+      - key: ALLOWED_ORIGINS
+        sync: false

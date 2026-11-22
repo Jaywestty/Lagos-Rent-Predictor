@@ -123,3 +123,19 @@ def test_price_question_classified_as_advice_goes_to_listings():
 
     tips = PropertyEntities(query_type=QueryType.ADVICE, area="Lekki", resolved_query="is Lekki safe")
     assert _route_price_questions_to_listings("Is Lekki safe at night?", tips).query_type == QueryType.ADVICE
+
+
+def test_ai_service_outage_returns_friendly_error_not_500():
+    from unittest.mock import patch
+
+    from fastapi.testclient import TestClient
+
+    from entrypoints.api import app
+
+    c = TestClient(app, raise_server_exceptions=False)
+    with patch("entrypoints.api.extract_entities", side_effect=ConnectionError("dns down")), \
+         patch("entrypoints.api.start_trace", return_value="t"):
+        r = c.post("/api/chat", json={"query": "rent in Yaba"})
+    assert r.status_code == 200
+    assert r.json()["answer"]["status"] == "error"
+    assert "try again" in r.json()["answer"]["message"].lower()

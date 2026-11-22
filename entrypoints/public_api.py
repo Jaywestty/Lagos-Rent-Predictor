@@ -19,7 +19,7 @@ from query.response import listing_card
 
 router = APIRouter(prefix="/api", tags=["public"])
 
-ALLOWED_EVENTS = {"move_in_calculator", "compare_view", "guide_view", "trend_view", "listing_click", "chip_click"}
+ALLOWED_EVENTS = {"move_in_calculator", "compare_view", "guide_view", "trend_view", "listing_click", "chip_click", "answer_feedback"}
 
 
 def _client(x_client_id: str | None) -> str:
@@ -209,3 +209,41 @@ def track(body: EventIn, x_client_id: str | None = Header(default=None)):
     detail = {k: v for k, v in list(body.detail.items())[:10] if isinstance(v, str | int | float | bool | None)}
     record_feature(body.feature, x_client_id if x_client_id and len(x_client_id) <= 64 else None, **detail)
     return {"ok": True}
+
+
+# Chat history (per device, see conversation/history.py)
+
+
+@router.get("/me/threads")
+def list_chat_threads(x_client_id: str | None = Header(default=None)):
+    from conversation.history import list_threads
+
+    return {"items": list_threads(_client(x_client_id))}
+
+
+@router.get("/me/threads/{thread_id}")
+def get_chat_thread(thread_id: str, x_client_id: str | None = Header(default=None)):
+    from conversation.history import get_thread, valid_uuid
+
+    tid = valid_uuid(thread_id)
+    thread = get_thread(_client(x_client_id), tid) if tid else None
+    if not thread:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    return thread
+
+
+@router.delete("/me/threads/{thread_id}")
+def delete_chat_thread(thread_id: str, x_client_id: str | None = Header(default=None)):
+    from conversation.history import delete_thread, valid_uuid
+
+    tid = valid_uuid(thread_id)
+    if not tid or not delete_thread(_client(x_client_id), tid):
+        raise HTTPException(status_code=404, detail="Chat not found")
+    return {"ok": True}
+
+
+@router.delete("/me/threads")
+def delete_all_chat_threads(x_client_id: str | None = Header(default=None)):
+    from conversation.history import delete_all_threads
+
+    return {"ok": True, "deleted": delete_all_threads(_client(x_client_id))}

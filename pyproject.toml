@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "lagos-rent"
 version = "0.1.0"
-description = "Lagos Rent Assistant"
+description = "Adugbo AI: Lagos rent prices from real listings"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "argon2-cffi>=25.1.0",

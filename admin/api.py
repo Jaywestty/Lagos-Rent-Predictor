@@ -253,16 +253,10 @@ _RUN_COLUMNS = ("id, triggered_by, started_at, completed_at, status, listings_di
 def active_scrape(request: Request, admin_session: str | None = Cookie(default=None)):
     """The run in progress (with live progress) and the most recent finished run, for the admin progress panel."""
     get_current_admin(request, admin_session)
-    from scraping.runner import close_dead_run, mark_interrupted_runs
+    from scraping.runner import mark_interrupted_runs
 
-    # Never show a ghost: close runs whose heartbeat stopped, and admin runs this server is not running.
+    # Never show a ghost: close runs whose heartbeat has gone silent.
     mark_interrupted_runs()
-    with get_engine().connect() as conn:
-        candidates = conn.execute(text("SELECT id, triggered_by, status, progress FROM scraper_runs "
-                                       "WHERE status IN ('running', 'queued') AND triggered_by LIKE 'admin:%'")).mappings().all()
-    for row in candidates:
-        if not _run_is_alive(row["id"], row):
-            close_dead_run(row["id"])
     with get_engine().connect() as conn:
         active = conn.execute(text(f"SELECT {_RUN_COLUMNS} FROM scraper_runs WHERE status IN ('running', 'queued') "
                                    "ORDER BY started_at DESC LIMIT 1")).mappings().first()
@@ -284,7 +278,7 @@ def stop_scrape(job_id: int, request: Request, admin_session: str | None = Cooki
     from scraping.runner import close_dead_run, request_stop
 
     with get_engine().connect() as conn:
-        row = conn.execute(text("SELECT triggered_by, status, progress FROM scraper_runs WHERE id = :id"), {"id": job_id}).mappings().first()
+        row = conn.execute(text("SELECT triggered_by, status, progress, started_at FROM scraper_runs WHERE id = :id"), {"id": job_id}).mappings().first()
     if not row or row["status"] not in ("running", "queued"):
         raise HTTPException(status_code=409, detail="That run is not running")
     if not _run_is_alive(job_id, row):
@@ -296,23 +290,26 @@ def stop_scrape(job_id: int, request: Request, admin_session: str | None = Cooki
     return {"ok": True, "job_id": job_id, "closed": False}
 
 
-DEAD_HEARTBEAT_SECONDS = 180
+DEAD_HEARTBEAT_SECONDS = 300
 
 
 def _run_is_alive(job_id: int, row) -> bool:
-    """Admin runs live in this process: alive only while this process holds the scrape lock for it.
-    Other runs (scheduled task) are alive while their progress heartbeat is recent."""
-    if str(row["triggered_by"]).startswith("admin:"):
-        return _scrape_lock.locked() and str(job_id) in _run_state and _run_state[str(job_id)].get("state") in ("queued", "running")
-    progress = row["progress"] or {}
+    """A run is alive while its progress heartbeat is recent, whichever server or machine runs it.
+    A run that has not reported yet gets the same grace period from its start."""
+    if str(job_id) in _run_state and _run_state[str(job_id)].get("state") in ("queued", "running") and _scrape_lock.locked():
+        return True  # running in this very process
+    progress = row.get("progress")
     beat = progress.get("heartbeat_at") if isinstance(progress, dict) else None
-    if not beat:
+    reference = beat or row.get("started_at")
+    if not reference:
         return False
     try:
-        age = (datetime.now(UTC) - datetime.fromisoformat(beat)).total_seconds()
+        when = reference if isinstance(reference, datetime) else datetime.fromisoformat(str(reference))
     except ValueError:
         return False
-    return age < DEAD_HEARTBEAT_SECONDS
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - when).total_seconds() < DEAD_HEARTBEAT_SECONDS
 
 
 @router.get("/operations/scrape/{job_id}")
