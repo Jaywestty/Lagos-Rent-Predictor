@@ -90,7 +90,7 @@ export function Chat() {
       setExchanges((xs) => xs.map((x) => (x.key === key ? { ...x, state: "done", result } : x)));
       // The first real answer creates the chat on the server (errors are not saved): put it in the
       // address so refresh or history reopens it.
-      if (result.answer?.status !== "error") {
+      if (result.answer && !["error", "out_of_scope"].includes(result.answer.status)) {
         if (!params.get("c")) setParams({ c: tid }, { replace: true });
         qc.invalidateQueries({ queryKey: ["threads"] });
       }
