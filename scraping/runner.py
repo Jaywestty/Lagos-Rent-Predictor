@@ -34,6 +34,11 @@ DEFAULT_MAX_PAGES = 30
 DEFAULT_RESUME_HOURS = 72
 # The scheduled task is stopped by Windows after 6 hours, so an older "running" row is dead.
 STALE_RUN_HOURS = 7
+# A run reports progress at least once a minute (each listing takes seconds), so a run whose
+# last progress update is older than this has died (process killed, server restarted, laptop off).
+DEAD_AFTER_MINUTES = 10
+
+_INTERRUPTED_NOTE = "Stopped before finishing. Pages saved before the stop are kept."
 
 
 class ScrapeBlocked(RuntimeError):
@@ -133,21 +138,42 @@ def request_stop(run_id: int, engine=None) -> bool:
     return bool(n)
 
 
-def mark_interrupted_runs(engine=None, older_than_hours: int = STALE_RUN_HOURS) -> list[int]:
-    """Rows still 'running' or 'queued' long after any run could last were killed mid-way."""
+def _close_runs(where_sql: str, params: dict, note: str = _INTERRUPTED_NOTE, engine=None) -> list[int]:
     eng = engine or get_engine()
     with eng.begin() as conn:
-        rows = conn.execute(text("""
+        rows = conn.execute(text(f"""
             UPDATE scraper_runs
             SET status = 'interrupted', completed_at = now(),
-                log_excerpt = COALESCE(log_excerpt, '') || CASE WHEN COALESCE(log_excerpt, '') = '' THEN '' ELSE E'\\n' END
-                              || 'Stopped before finishing. Pages saved before the stop are kept.'
-            WHERE status IN ('running', 'queued') AND started_at < now() - make_interval(hours => :h)
+                log_excerpt = COALESCE(log_excerpt, '') || CASE WHEN COALESCE(log_excerpt, '') = '' THEN '' ELSE E'\\n' END || :note
+            WHERE status IN ('running', 'queued') AND ({where_sql})
             RETURNING id
-        """), {"h": older_than_hours}).scalars().all()
+        """), {**params, "note": note}).scalars().all()
     if rows:
         logger.info("Marked runs as interrupted: {}", rows)
     return list(rows)
+
+
+def mark_interrupted_runs(engine=None, older_than_hours: int = STALE_RUN_HOURS,
+                          dead_after_minutes: int = DEAD_AFTER_MINUTES) -> list[int]:
+    """Close runs that cannot still be alive: too old, or no progress heartbeat for a while."""
+    return _close_runs(
+        "started_at < now() - make_interval(hours => :h) "
+        "OR (progress ? 'heartbeat_at' AND (progress->>'heartbeat_at')::timestamptz < now() - make_interval(mins => :m))",
+        {"h": older_than_hours, "m": dead_after_minutes}, engine=engine)
+
+
+def close_orphaned_admin_runs(engine=None) -> list[int]:
+    """Called when the API starts. Admin-started scrapes live inside the API process, so any still
+    marked running from before this start died with the previous process."""
+    return _close_runs("triggered_by LIKE 'admin:%'", {},
+                       note="Stopped when the backend restarted. Pages saved before that are kept.", engine=engine)
+
+
+def close_dead_run(run_id: int, engine=None) -> bool:
+    """Close one run that is known not to be running any more (used by the admin Stop button)."""
+    return bool(_close_runs("id = :id", {"id": run_id},
+                            note="Closed from admin: the scraper was no longer running. Pages saved before that are kept.",
+                            engine=engine))
 
 
 def mark_run_interrupted(run_id: int, loaded: dict | None = None, engine=None) -> bool:
