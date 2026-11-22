@@ -23,7 +23,9 @@ export type ChatAnswer = {
   message: string;
   comparison?: { options: ComparisonOptionStat[] } | null;
   budget?: BudgetInfo | null;
+  no_data?: NoDataHelp | null;
 };
+export type NoDataHelp = { area: string | null; covered?: boolean; area_listings?: number; did_you_mean?: string | null; suggestions?: string[] };
 export type ComparisonOptionStat = { label: string; area: string | null; beds: number | null; property_type: string | null; median: number | null; min: number | null; max: number | null; count: number; confidence: "normal" | "limited" | "insufficient"; caveat: string | null };
 export type BudgetInfo = { amount: number; period: "year" | "month"; yearly: number; within_count: number; areas: { area: string; count: number }[]; stretch_count: number };
 export type SseEvent =
