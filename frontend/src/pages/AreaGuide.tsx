@@ -25,7 +25,7 @@ export function AreaGuide() {
   const trend = useQuery({ queryKey: ["trend", area, bucket], queryFn: () => getTrend(area, bucket), enabled: stats.isSuccess });
   const listings = useQuery({ queryKey: ["area-listings", area, bucket], queryFn: () => getAreaListings(area, BEDS_FOR[bucket]), enabled: stats.isSuccess });
 
-  useEffect(() => { document.title = `${area} rent and area guide · Lagos Rent`; }, [area]);
+  useEffect(() => { document.title = `${area} rent and area guide · Adugbo AI`; }, [area]);
 
   if (stats.isPending) return <Shell><Skeleton rows={4} /></Shell>;
   if (stats.isError) return <Shell><PageError message={`We have no recent listings for ${area} yet. Try another area from the list.`} /><Link to="/areas" className="btn mt-4 inline-flex items-center">All areas</Link></Shell>;
