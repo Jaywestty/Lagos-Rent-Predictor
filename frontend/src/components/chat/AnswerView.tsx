@@ -1,6 +1,6 @@
 import type { AskResult } from "../../services/api";
 import { RentAnswer } from "../rent/RentAnswer";
-import { ListingGrid } from "../rent/ListingCard";
+import { ListingRows } from "../rent/ListingRows";
 import { AdviceAnswer } from "../rent/AdviceAnswer";
 import { ErrorState, NoDataState, OutOfScopeState } from "../states/States";
 
@@ -20,14 +20,9 @@ export function AnswerView({ result, question, onAsk, onRetry, suggestions }: Pr
   if (answer.status === "success" || answer.status === "low_data") {
     return (
       <div className="space-y-4">
-        {answer.status === "low_data" && <p className="card fade-in p-4 text-[14px]" role="note"><strong>Low data:</strong> this estimate rests on very few listings. Treat it as a rough guide.</p>}
+        {answer.status === "low_data" && <p className="fade-in rounded-xl px-4 py-3 text-[14px]" role="note" style={{ background: "var(--sand)" }}><strong>Very few listings.</strong> Treat this as a rough guide, not a price to hold an agent to.</p>}
         <RentAnswer answer={answer} question={question} onAsk={onAsk} />
-        {listings.length > 0 && (
-          <section aria-label="Matching listings" className="fade-in">
-            <h3 className="mb-3 text-[16px] font-semibold">Listings behind this answer</h3>
-            <ListingGrid listings={listings.slice(0, 9)} />
-          </section>
-        )}
+        <ListingRows listings={listings.slice(0, 9)} typical={answer.median} />
       </div>
     );
   }
