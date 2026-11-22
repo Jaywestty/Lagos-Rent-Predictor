@@ -26,14 +26,15 @@ describe("smoke", () => {
   it("renders landing at 360 width", () => {
     Object.defineProperty(window, "innerWidth", { value: 360, configurable: true });
     render(wrap());
-    expect(screen.getByText(/Rent in Lagos/i)).toBeTruthy();
-    expect(screen.getByPlaceholderText(/How much is rent in Gbagada/i)).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/Know what rent really costs/);
+    expect(screen.getByPlaceholderText(/rent in Gbagada/i)).toBeTruthy();
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(360 + 2);
   });
   it("renders at desktop width with quick-search chips", async () => {
     Object.defineProperty(window, "innerWidth", { value: 1280, configurable: true });
     render(wrap());
-    expect(screen.getByText(/Ask like you talk/i)).toBeTruthy();
+    expect(screen.getByText(/typical yearly rent, the range/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "2 bedroom in Yaba" })).toBeTruthy();
     expect(await screen.findByRole("button", { name: "Lekki" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "2 bed" })).toBeTruthy();
   });
