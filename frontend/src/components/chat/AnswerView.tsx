@@ -1,0 +1,49 @@
+import type { AskResult } from "../../services/api";
+import { RentAnswer } from "../rent/RentAnswer";
+import { ListingGrid } from "../rent/ListingCard";
+import { AdviceAnswer } from "../rent/AdviceAnswer";
+import { ErrorState, NoDataState, OutOfScopeState } from "../states/States";
+
+type Props = {
+  result: AskResult;
+  question: string;
+  onAsk: (q: string) => void;
+  onRetry?: () => void;
+  suggestions: string[];
+};
+
+/** One answer in a chat: rent card and listings, advice, or the right empty/error state. */
+export function AnswerView({ result, question, onAsk, onRetry, suggestions }: Props) {
+  const { answer, listings, advice } = result;
+  if (advice) return <AdviceAnswer advice={advice} />;
+  if (!answer) return null;
+  if (answer.status === "success" || answer.status === "low_data") {
+    return (
+      <div className="space-y-4">
+        {answer.status === "low_data" && <p className="card fade-in p-4 text-[14px]" role="note"><strong>Low data:</strong> this estimate rests on very few listings. Treat it as a rough guide.</p>}
+        <RentAnswer answer={answer} question={question} onAsk={onAsk} />
+        {listings.length > 0 && (
+          <section aria-label="Matching listings" className="fade-in">
+            <h3 className="mb-3 text-[16px] font-semibold">Listings behind this answer</h3>
+            <ListingGrid listings={listings.slice(0, 9)} />
+          </section>
+        )}
+      </div>
+    );
+  }
+  if (answer.status === "no_data") return <NoDataState suggestions={suggestions.slice(0, 4)} onPick={(a) => onAsk(`How much is rent in ${a}?`)} />;
+  if (answer.status === "out_of_scope") return <OutOfScopeState />;
+  if (answer.status === "clarification") {
+    return (
+      <section className="card rise p-6" aria-label="Clarification">
+        <h3 className="text-[17px] font-semibold">{answer.clarification?.question || "Which area?"}</h3>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(answer.clarification?.options?.length ? answer.clarification.options : suggestions.slice(0, 4)).map((opt) => (
+            <button key={opt} type="button" onClick={() => onAsk(`${opt} rent`)} className="chip">{opt}</button>
+          ))}
+        </div>
+      </section>
+    );
+  }
+  return <ErrorState message={answer.message || "Something failed on our side."} onRetry={onRetry ?? (() => onAsk(question))} />;
+}
