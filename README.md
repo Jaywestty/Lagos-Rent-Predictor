@@ -130,6 +130,12 @@ Unregister-ScheduledTask -TaskName "Lagos Rent weekly scrape"
 
 A site that refuses access is skipped for that run and the run is marked *partial* (or *failed* if nothing was collected), visible in the admin console.
 
+**Stopping and resuming.** Each page is saved to the database as soon as it is scraped, so a run can be stopped at any time without losing finished pages. Starting it again skips listings saved in the last 72 hours (`--resume-hours`), so it carries on from where it stopped. A run that was stopped shows as *interrupted*. To load the file of a run that was stopped by an older version of the code:
+
+```powershell
+uv run python -m entrypoints.cli load-run
+```
+
 `.github/workflows/weekly-scrape.yml` is kept for manual cloud runs (**Run workflow** in the Actions tab) of sites that allow cloud traffic. It needs the `DATABASE_URL` repository secret, plus `GROQ_API_KEY` and `TAVILY_API_KEY` to pre-build area guides.
 
 ## Testing and quality
