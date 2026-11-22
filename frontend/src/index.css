@@ -3,32 +3,45 @@
 @tailwind utilities;
 
 :root {
-  --forest: #145c45;
-  --action: #21845f;
-  --soft: #e8f3ed;
-  --bg: #f7f8f6;
+  /* Quiet Ledger */
+  --forest: #0f4a37;
+  --action: #16624a;
+  --primary: #16624a;
+  --soft: #e8f1ec;
+  --sand: #f4ecdf;
+  --clay: #9a4a1f;
+  --bg: #f6f7f5;
   --surface: #ffffff;
   --elevated: #ffffff;
-  --text: #202923;
-  --secondary: #64716a;
-  --border: #d6ddd8;
-  --warn: #a66a13;
-  --danger: #b93838;
-  --primary: #21845f;
+  --text: #1b2420;
+  --secondary: #55635c;
+  --border: #e1e6e2;
+  --line: #eef1ef;
+  --warn: #8a5300;
+  --danger: #b42f2f;
 }
 .dark {
-  --bg: #101713;
-  --surface: #19231d;
-  --elevated: #202d25;
-  --text: #f1f5f2;
-  --secondary: #a6b5aa;
-  --border: #34443a;
+  --forest: #0b2e23;
+  --bg: #0f1513;
+  --surface: #161e1b;
+  --elevated: #1c2622;
+  --text: #edf2ef;
+  --secondary: #a3b1aa;
+  --border: #2a3631;
+  --line: #222c28;
   --warn: #e6b65d;
   --danger: #f08080;
-  --primary: #75c69c;
-  --soft: #202d25;
+  --primary: #6cc49b;
+  --action: #6cc49b;
+  --soft: #1f2a26;
+  --sand: #2a2620;
+  --clay: #e0a27f;
 }
-body { background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+.font-display, h1, h2 { font-family: "Space Grotesk", Inter, system-ui, sans-serif; letter-spacing: -0.01em; }
+.figure { font-family: "Space Grotesk", Inter, system-ui, sans-serif; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.ledger { background-image: repeating-linear-gradient(180deg, transparent 0 31px, var(--line) 31px 32px); }
+.kicker { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--secondary); }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
 @media (min-width: 768px) { .card { border-radius: 16px; } }
 .tabular { font-variant-numeric: tabular-nums; }
@@ -83,3 +96,15 @@ body { background: var(--bg); color: var(--text); font-family: Inter, system-ui,
 /* Chat history drawer */
 @keyframes slideIn { from { transform: translateX(-100%) } to { transform: none } }
 .slide-in { animation: slideIn 220ms cubic-bezier(.2,.7,.2,1) both; }
+
+/* Welcome screen motion: one orchestrated entrance, then a slow live ticker. Off under reduced motion. */
+@keyframes wordUp { from { opacity: 0; transform: translateY(.45em) } to { opacity: 1; transform: none } }
+.word-up { display: inline-block; animation: wordUp 560ms cubic-bezier(.2,.7,.2,1) both; }
+@keyframes ticker { from { transform: translateX(0) } to { transform: translateX(-50%) } }
+.ticker-track { display: flex; width: max-content; animation: ticker 48s linear infinite; }
+.ticker:hover .ticker-track, .ticker:focus-within .ticker-track { animation-play-state: paused; }
+@keyframes drawLine { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+.draw-line { transform-origin: left; animation: drawLine 900ms cubic-bezier(.2,.7,.2,1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track { width: auto; flex-wrap: wrap; }
+}
