@@ -72,12 +72,15 @@ def test_admin_scrape_control_requires_auth():
     assert c.post("/api/admin/operations/scrape/5/stop").status_code in (401, 403)
 
 
-def test_admin_run_is_dead_when_this_server_is_not_running_it():
+def test_run_without_heartbeat_is_alive_only_shortly_after_start():
     from admin import api
 
-    row = {"triggered_by": "admin:me@example.com", "status": "running", "progress": None}
     api._run_state.pop("41", None)
-    assert api._run_is_alive(41, row) is False  # e.g. left over from before a restart
+    old = {"triggered_by": "admin:me@example.com", "status": "running", "progress": None,
+           "started_at": datetime.now(UTC) - timedelta(minutes=30)}
+    new = {**old, "started_at": datetime.now(UTC) - timedelta(seconds=20)}
+    assert api._run_is_alive(41, old) is False  # e.g. left over from before a restart
+    assert api._run_is_alive(41, new) is True  # another server may have just started it
 
 
 def test_scheduled_run_alive_only_with_recent_heartbeat():
@@ -87,7 +90,8 @@ def test_scheduled_run_alive_only_with_recent_heartbeat():
              "progress": {"heartbeat_at": datetime.now(UTC).isoformat()}}
     stale = {"triggered_by": "laptop-schedule", "status": "running",
              "progress": {"heartbeat_at": (datetime.now(UTC) - timedelta(minutes=10)).isoformat()}}
-    silent = {"triggered_by": "laptop-schedule", "status": "running", "progress": None}
+    silent = {"triggered_by": "laptop-schedule", "status": "running", "progress": None,
+              "started_at": datetime.now(UTC) - timedelta(minutes=10)}
     assert api._run_is_alive(1, fresh) is True
     assert api._run_is_alive(1, stale) is False
     assert api._run_is_alive(1, silent) is False
