@@ -79,3 +79,7 @@ body { background: var(--bg); color: var(--text); font-family: Inter, system-ui,
 /* Scrape progress: sliding bar when the total is unknown. Off under reduced motion like everything else. */
 @keyframes indeterminate { 0% { left: -35% } 100% { left: 100% } }
 .indeterminate { animation: indeterminate 1.4s ease-in-out infinite; }
+
+/* Chat history drawer */
+@keyframes slideIn { from { transform: translateX(-100%) } to { transform: none } }
+.slide-in { animation: slideIn 220ms cubic-bezier(.2,.7,.2,1) both; }
