@@ -3,6 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { timeAgo } from "../../lib/format";
 import { useSiteStats } from "../../lib/useSiteStats";
 import { MascotHead } from "../brand/Mascot";
+import { useInstall } from "../../lib/pwa";
 
 const LINKS = [
   { to: "/", label: "Ask", end: true },
@@ -52,6 +53,27 @@ function linkClass({ isActive }: { isActive: boolean }) {
   return `min-h-[40px] content-center rounded-lg px-3 text-[14px] font-semibold transition-colors ${isActive ? "" : "muted hover:text-[color:var(--text)]"}`;
 }
 
+/** "Install app": the browser prompt on Android/desktop, or Add to Home Screen steps on iPhone. */
+export function InstallButton({ className = "", block = false }: { className?: string; block?: boolean }) {
+  const { mode, install } = useInstall();
+  const [hint, setHint] = useState(false);
+  if (mode === "none") return null;
+  return (
+    <span className={`relative ${className}`}>
+      <button type="button" className={`btn-ghost inline-flex items-center gap-2 ${block ? "w-full justify-center" : ""}`}
+        onClick={() => (mode === "prompt" ? install() : setHint((h) => !h))} aria-expanded={mode === "ios" ? hint : undefined}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg>
+        Install app
+      </button>
+      {hint && (
+        <span role="status" className="fade-in absolute right-0 top-[calc(100%+8px)] z-30 w-[260px] rounded-xl border p-3 text-left text-[13px] leading-snug shadow-lg" style={{ background: "var(--surface)", borderColor: "var(--border)" }}>
+          On iPhone or iPad: tap the <strong>Share</strong> button in Safari, then <strong>Add to Home Screen</strong>.
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function Header({ theme, onToggle }: { theme: string; onToggle: () => void }) {
   const [open, setOpen] = useState(false);
   const location = useLocation();
@@ -69,6 +91,7 @@ export function Header({ theme, onToggle }: { theme: string; onToggle: () => voi
         </nav>
         <div className="flex items-center gap-2">
           <LiveBadge className="hidden xl:inline-flex" />
+          <InstallButton className="hidden lg:inline-block" />
           <button type="button" onClick={onToggle} aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} className="btn-ghost grid w-11 place-items-center px-0"><ThemeIcon dark={dark} /></button>
           <button type="button" className="btn-ghost grid w-11 place-items-center px-0 lg:hidden" aria-label="Menu" aria-expanded={open} aria-controls="mobile-nav" onClick={() => setOpen((o) => !o)}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>{open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h10" />}</svg>
@@ -82,6 +105,7 @@ export function Header({ theme, onToggle }: { theme: string; onToggle: () => voi
               <NavLink key={l.to} to={l.to} end={l.end} className={({ isActive }) => `block min-h-[48px] content-center rounded-lg px-3 text-[16px] font-semibold ${isActive ? "" : "muted"}`} style={({ isActive }) => (isActive ? { background: "var(--soft)", color: "var(--action)" } : undefined)}>{l.label}</NavLink>
             ))}
           </div>
+          <InstallButton className="mt-3 block" block />
           <LiveBadge className="mt-3" />
         </nav>
       )}
