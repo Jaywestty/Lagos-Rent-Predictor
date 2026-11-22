@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -53,7 +54,7 @@ def log_question(request_id, session_id=None, raw_question="", parsed_location=N
 
 _RUN_UPDATABLE = {
     "status", "listings_discovered", "listings_added", "listings_updated", "duplicates_skipped",
-    "validation_failures", "error_count", "log_excerpt", "listings_too_old", "since_days",
+    "validation_failures", "error_count", "log_excerpt", "listings_too_old", "since_days", "progress",
 }
 
 
@@ -64,7 +65,9 @@ def update_scraper_run(run_id: int, completed: bool = False, **fields) -> None:
         raise ValueError(f"Unknown scraper_runs fields: {sorted(unknown)}")
     if "log_excerpt" in fields:
         fields["log_excerpt"] = (fields["log_excerpt"] or "")[:8000]
-    sets = [f"{k} = :{k}" for k in fields]
+    if "progress" in fields:
+        fields["progress"] = json.dumps(fields["progress"], default=str) if fields["progress"] is not None else None
+    sets = [f"{k} = CAST(:{k} AS JSONB)" if k == "progress" else f"{k} = :{k}" for k in fields]
     if completed:
         sets.append("completed_at = now()")
     if not sets:

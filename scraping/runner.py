@@ -16,6 +16,7 @@ delivered, the run is "partial". If nothing was collected because of blocks,
 the run is "failed" and run_scrape raises, so a scheduled job shows as failed.
 """
 
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -33,10 +34,67 @@ DEFAULT_MAX_PAGES = 30
 DEFAULT_RESUME_HOURS = 72
 # The scheduled task is stopped by Windows after 6 hours, so an older "running" row is dead.
 STALE_RUN_HOURS = 7
+# A run reports progress at least once a minute (each listing takes seconds), so a run whose
+# last progress update is older than this has died (process killed, server restarted, laptop off).
+DEAD_AFTER_MINUTES = 10
+
+_INTERRUPTED_NOTE = "Stopped before finishing. Pages saved before the stop are kept."
 
 
 class ScrapeBlocked(RuntimeError):
     pass
+
+
+class ProgressTracker:
+    """Turns scraper progress events into one JSON record on the run row, for the admin progress bar.
+
+    Step and page changes are written at once; per-listing updates at most every
+    `min_interval` seconds so the database is not hammered.
+    """
+
+    COUNT_KEYS = ("discovered", "kept", "already_have", "too_old", "no_date", "no_price", "fetch_failed", "pages_failed")
+
+    def __init__(self, run_id: int, saved: dict, min_interval: float = 3.0, writer=None):
+        self.run_id = run_id
+        self.saved = saved
+        self.min_interval = min_interval
+        self.writer = writer or (lambda progress: update_scraper_run(run_id, progress=progress))
+        self._last_write = 0.0
+        self.state: dict = {
+            "phase": "scraping", "step": 0, "total_steps": 0, "site": None, "category": None,
+            "page": None, "page_number": 0, "max_pages": None, "page_done": 0, "page_total": 0,
+            "started_at": datetime.now(UTC).isoformat(),
+        }
+
+    def __call__(self, event: dict) -> None:
+        kind = event.get("event")
+        stats = event.get("stats") or {}
+        if kind == "step":
+            self.state.update(step=event["step"], total_steps=event["total_steps"], site=event["site"],
+                              category=event["category"], page=None, page_number=0, page_done=0, page_total=0)
+        elif kind == "page":
+            self.state.update(page=event["page"], page_number=event["page_number"], max_pages=event["max_pages"],
+                              page_done=0, page_total=event["page_total"])
+        elif kind == "listing":
+            self.state.update(page_done=event["page_done"], page_total=event["page_total"])
+        self.state["counts"] = {k: stats.get(k, 0) for k in self.COUNT_KEYS}
+        self.write(force=kind in ("step", "page"))
+
+    def phase(self, name: str) -> None:
+        self.state["phase"] = name
+        self.write(force=True)
+
+    def write(self, force: bool = False) -> None:
+        now = time.monotonic()
+        if not force and now - self._last_write < self.min_interval:
+            return
+        self._last_write = now
+        self.state["saved"] = dict(self.saved)
+        self.state["heartbeat_at"] = datetime.now(UTC).isoformat()
+        try:
+            self.writer(dict(self.state))
+        except Exception as exc:  # progress display must never stop a scrape
+            logger.warning("progress update failed: {}", exc)
 
 
 def run_status(stats: dict) -> str:
@@ -46,21 +104,76 @@ def run_status(stats: dict) -> str:
     return "partial" if stats.get("kept", 0) + stats.get("already_have", 0) > 0 else "failed"
 
 
-def mark_interrupted_runs(engine=None, older_than_hours: int = STALE_RUN_HOURS) -> list[int]:
-    """Rows still 'running' or 'queued' long after any run could last were killed mid-way."""
+class StopFlag:
+    """Asks the database whether an admin pressed Stop for this run, at most every `min_interval` seconds."""
+
+    def __init__(self, run_id: int, min_interval: float = 4.0, reader=None):
+        self.run_id = run_id
+        self.min_interval = min_interval
+        self.reader = reader or self._read
+        self._last_check = 0.0
+        self._stop = False
+
+    def _read(self) -> bool:
+        with get_engine().connect() as conn:
+            return bool(conn.execute(text("SELECT stop_requested_at IS NOT NULL FROM scraper_runs WHERE id = :id"),
+                                     {"id": self.run_id}).scalar())
+
+    def __call__(self) -> bool:
+        if self._stop:
+            return True
+        now = time.monotonic()
+        if now - self._last_check >= self.min_interval:
+            self._last_check = now
+            self._stop = self.reader()
+        return self._stop
+
+
+def request_stop(run_id: int, engine=None) -> bool:
+    """Ask a running scrape to stop after the listing it is on. True if the run was running."""
     eng = engine or get_engine()
     with eng.begin() as conn:
-        rows = conn.execute(text("""
+        n = conn.execute(text("UPDATE scraper_runs SET stop_requested_at = COALESCE(stop_requested_at, now()) "
+                              "WHERE id = :id AND status IN ('running', 'queued')"), {"id": run_id}).rowcount
+    return bool(n)
+
+
+def _close_runs(where_sql: str, params: dict, note: str = _INTERRUPTED_NOTE, engine=None) -> list[int]:
+    eng = engine or get_engine()
+    with eng.begin() as conn:
+        rows = conn.execute(text(f"""
             UPDATE scraper_runs
             SET status = 'interrupted', completed_at = now(),
-                log_excerpt = COALESCE(log_excerpt, '') || CASE WHEN COALESCE(log_excerpt, '') = '' THEN '' ELSE E'\\n' END
-                              || 'Stopped before finishing. Pages saved before the stop are kept.'
-            WHERE status IN ('running', 'queued') AND started_at < now() - make_interval(hours => :h)
+                log_excerpt = COALESCE(log_excerpt, '') || CASE WHEN COALESCE(log_excerpt, '') = '' THEN '' ELSE E'\\n' END || :note
+            WHERE status IN ('running', 'queued') AND ({where_sql})
             RETURNING id
-        """), {"h": older_than_hours}).scalars().all()
+        """), {**params, "note": note}).scalars().all()
     if rows:
         logger.info("Marked runs as interrupted: {}", rows)
     return list(rows)
+
+
+def mark_interrupted_runs(engine=None, older_than_hours: int = STALE_RUN_HOURS,
+                          dead_after_minutes: int = DEAD_AFTER_MINUTES) -> list[int]:
+    """Close runs that cannot still be alive: too old, or no progress heartbeat for a while."""
+    return _close_runs(
+        "started_at < now() - make_interval(hours => :h) "
+        "OR (progress ? 'heartbeat_at' AND (progress->>'heartbeat_at')::timestamptz < now() - make_interval(mins => :m))",
+        {"h": older_than_hours, "m": dead_after_minutes}, engine=engine)
+
+
+def close_orphaned_admin_runs(engine=None) -> list[int]:
+    """Called when the API starts. Admin-started scrapes live inside the API process, so any still
+    marked running from before this start died with the previous process."""
+    return _close_runs("triggered_by LIKE 'admin:%'", {},
+                       note="Stopped when the backend restarted. Pages saved before that are kept.", engine=engine)
+
+
+def close_dead_run(run_id: int, engine=None) -> bool:
+    """Close one run that is known not to be running any more (used by the admin Stop button)."""
+    return bool(_close_runs("id = :id", {"id": run_id},
+                            note="Closed from admin: the scraper was no longer running. Pages saved before that are kept.",
+                            engine=engine))
 
 
 def mark_run_interrupted(run_id: int, loaded: dict | None = None, engine=None) -> bool:
@@ -104,10 +217,13 @@ def run_scrape(triggered_by: str = "schedule", max_pages: int = DEFAULT_MAX_PAGE
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     csv_path = RUNS_DIR / f"run_{run_id}_{stamp}.csv"
     saved = {"added": 0, "updated": 0, "pages": 0}
+    progress = ProgressTracker(run_id, saved)
+    progress.phase("starting")
 
     try:
         from pipeline.load_data import load_csv_to_db, load_records
         from query.market import write_snapshots
+        from scraping.scraper import ScrapeStopped
         from scraping.scraper import main as scraper_main
 
         known = recently_collected(resume_hours)
@@ -122,17 +238,31 @@ def run_scrape(triggered_by: str = "schedule", max_pages: int = DEFAULT_MAX_PAGE
             update_scraper_run(run_id, listings_added=saved["added"], listings_updated=saved["updated"],
                                log_excerpt=f"In progress: {saved['pages']} pages saved, "
                                            f"{saved['added']} new and {saved['updated']} updated listings so far")
+            progress.write(force=True)
 
-        stats = scraper_main([
-            "--site", site, "--category", category, "--type", "rent",
-            "--max-pages", str(max_pages), "--since-days", str(since_days), "--output", str(csv_path),
-        ], on_page=save_page, known=known)
+        progress.phase("scraping")
 
+        stopped = False
+        try:
+            stats = scraper_main([
+                "--site", site, "--category", category, "--type", "rent",
+                "--max-pages", str(max_pages), "--since-days", str(since_days), "--output", str(csv_path),
+            ], on_page=save_page, known=known, on_progress=progress, should_stop=StopFlag(run_id))
+        except ScrapeStopped:
+            # Stopped from admin. Everything finished so far is saved; tidy up and record it.
+            stopped = True
+            logger.info("scrape run {} stopped on request", run_id)
+            stats = {k: 0 for k in ("discovered", "kept", "already_have", "too_old", "no_date", "no_price",
+                                    "fetch_failed", "pages_failed", "page_load_errors")}
+            stats.update(progress.state.get("counts") or {})
+            stats["blocked_sites"] = []
+
+        progress.phase("finishing")
         # Final pass: cross-page de-duplication and the quality report over everything this run fetched.
         final = load_csv_to_db(str(csv_path), report_out=str(RUNS_DIR / f"run_{run_id}_quality.json"))
         snapshots = write_snapshots()
         blocked = stats.get("blocked_sites") or []
-        status = run_status(stats)
+        status = "stopped" if stopped else run_status(stats)
         lines = [f"window={since_days}d max_pages={max_pages} site={site} category={category} resume={resume_hours}h"]
         if blocked:
             lines.append(f"BLOCKED: {', '.join(blocked)} refused access (HTTP 403) from this machine")
@@ -155,6 +285,7 @@ def run_scrape(triggered_by: str = "schedule", max_pages: int = DEFAULT_MAX_PAGE
             error_count=stats["fetch_failed"] + stats.get("pages_failed", 0) + stats.get("page_load_errors", 0),
             log_excerpt=excerpt,
         )
+        progress.phase("stopped" if stopped else "done")
         logger.info("scrape run {} {}: {}", run_id, status, " | ".join(lines))
         if blocked:
             from observability.events import drain, record_error
@@ -167,6 +298,7 @@ def run_scrape(triggered_by: str = "schedule", max_pages: int = DEFAULT_MAX_PAGE
 
         record_error("scraper", exc)
         drain()
+        progress.phase("failed")
         update_scraper_run(run_id, completed=True, status="failed", error_count=1,
                            listings_added=saved["added"], listings_updated=saved["updated"],
                            log_excerpt=f"{exc!r}\nSaved before the failure: {saved['added']} new, {saved['updated']} updated")

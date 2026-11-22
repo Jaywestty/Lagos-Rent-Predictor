@@ -75,3 +75,7 @@ body { background: var(--bg); color: var(--text); font-family: Inter, system-ui,
 .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; background: var(--soft); }
 .input { min-height: 44px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 10px; padding: 0 12px; font-size: 15px; }
 .tooltip { position: absolute; pointer-events: none; background: var(--elevated); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; z-index: 5; }
+
+/* Scrape progress: sliding bar when the total is unknown. Off under reduced motion like everything else. */
+@keyframes indeterminate { 0% { left: -35% } 100% { left: 100% } }
+.indeterminate { animation: indeterminate 1.4s ease-in-out infinite; }

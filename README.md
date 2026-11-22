@@ -111,6 +111,8 @@ uv run python -m entrypoints.cli create-admin
 
 Admin sessions use Argon2-hashed passwords, HttpOnly cookies, CSRF tokens on every change, and login lockout after repeated failures.
 
+**Operations** starts a scrape and shows it live: the current site and category (step x of y), the listing being read on the current page, and running counts of new, updated, skipped and too-old listings, with a warning if updates stop arriving. **Stop scrape** ends a run after the listing it is on. Everything saved so far is kept, the run is marked *stopped*, and the next run continues from there. Stopping works the same for runs started by the scheduled task.
+
 ## Scheduled scraping
 
 Some listing sites refuse requests from cloud servers, so the weekly run happens on a local Windows machine with Windows Task Scheduler:

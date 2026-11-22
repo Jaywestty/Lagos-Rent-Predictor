@@ -4,6 +4,7 @@ import json
 import re
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
@@ -22,7 +23,22 @@ from query.response import build_affordability_response, build_comparison_respon
 
 logger.add("logs/app.log", rotation="10 MB", retention="14 days", level="INFO")
 
-app = FastAPI(title="Lagos House Hunter AI")
+
+
+@asynccontextmanager
+async def _lifespan(_app):
+    # Admin-started scrapes run inside this process, so any still marked running from a
+    # previous start died with that process. Close them so admin never shows a ghost run.
+    try:
+        from scraping.runner import close_orphaned_admin_runs
+
+        await asyncio.get_running_loop().run_in_executor(None, close_orphaned_admin_runs)
+    except Exception as exc:
+        logger.warning("could not close orphaned scrape runs: {}", exc)
+    yield
+
+
+app = FastAPI(title="Lagos House Hunter AI", lifespan=_lifespan)
 install_http_middleware(app)
 
 from entrypoints.public_api import router as public_router  # noqa: E402
