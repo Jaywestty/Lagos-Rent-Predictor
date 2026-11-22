@@ -153,7 +153,7 @@ def scraper_runs(request: Request, page: int = 1, page_size: int = 20, admin_ses
     engine = get_engine()
     with engine.connect() as conn:
         rows = conn.execute(
-            text("SELECT id, triggered_by, started_at, completed_at, status, listings_discovered, listings_added, listings_updated, duplicates_skipped, validation_failures, listings_too_old, since_days, error_count, log_excerpt FROM scraper_runs ORDER BY started_at DESC LIMIT :lim OFFSET :off"),
+            text("SELECT id, triggered_by, started_at, completed_at, status, listings_discovered, listings_added, listings_updated, duplicates_skipped, validation_failures, listings_too_old, since_days, error_count, log_excerpt, progress FROM scraper_runs ORDER BY started_at DESC LIMIT :lim OFFSET :off"),
             {"lim": page_size, "off": (page - 1) * page_size},
         ).mappings().all()
         total = conn.execute(text("SELECT COUNT(*) FROM scraper_runs")).scalar() or 0
@@ -204,8 +204,11 @@ def review_queue(request: Request, status: str | None = None, page: int = 1, pag
 
 def _run_scrape_job(job_id: int, triggered_by: str) -> None:
     try:
+        from analytics_logging import apply_migrations
         from scraping.runner import run_scrape
+
         _run_state[str(job_id)] = {"state": "running"}
+        apply_migrations()
         run_scrape(triggered_by=triggered_by, run_id=job_id)
     except Exception as exc:
         logger.error("admin scrape failed: {}", exc)
@@ -241,12 +244,43 @@ def trigger_scrape(request: Request, background: BackgroundTasks, admin_session:
         raise HTTPException(status_code=500, detail="Could not queue scrape") from exc
 
 
+_RUN_COLUMNS = ("id, triggered_by, started_at, completed_at, status, listings_discovered, listings_added, "
+                "listings_updated, duplicates_skipped, validation_failures, listings_too_old, since_days, "
+                "error_count, log_excerpt, progress, stop_requested_at")
+
+
+@router.get("/operations/scrape/active")
+def active_scrape(request: Request, admin_session: str | None = Cookie(default=None)):
+    """The run in progress (with live progress) and the most recent finished run, for the admin progress panel."""
+    get_current_admin(request, admin_session)
+    with get_engine().connect() as conn:
+        active = conn.execute(text(f"SELECT {_RUN_COLUMNS} FROM scraper_runs WHERE status IN ('running', 'queued') "
+                                   "ORDER BY started_at DESC LIMIT 1")).mappings().first()
+        last = conn.execute(text(f"SELECT {_RUN_COLUMNS} FROM scraper_runs WHERE status NOT IN ('running', 'queued') "
+                                 "ORDER BY started_at DESC LIMIT 1")).mappings().first()
+    return {"active": dict(active) if active else None, "last": dict(last) if last else None,
+            "server_time": datetime.now(UTC).isoformat()}
+
+
+@router.post("/operations/scrape/{job_id}/stop")
+def stop_scrape(job_id: int, request: Request, admin_session: str | None = Cookie(default=None)):
+    """Ask a running scrape to stop after the listing it is on. Saved pages are kept."""
+    sess = get_current_admin(request, admin_session)
+    require_csrf(request, sess)
+    from scraping.runner import request_stop
+
+    if not request_stop(job_id):
+        raise HTTPException(status_code=409, detail="That run is not running")
+    logger.info("Stop requested for scrape run {} by {}", job_id, sess.get("email"))
+    return {"ok": True, "job_id": job_id}
+
+
 @router.get("/operations/scrape/{job_id}")
 def scrape_status(job_id: int, request: Request, admin_session: str | None = Cookie(default=None)):
     get_current_admin(request, admin_session)
     engine = get_engine()
     with engine.connect() as conn:
-        row = conn.execute(text("SELECT id, triggered_by, started_at, completed_at, status, listings_discovered, listings_added, listings_updated, duplicates_skipped, validation_failures, listings_too_old, since_days, error_count, log_excerpt FROM scraper_runs WHERE id = :id"), {"id": job_id}).mappings().first()
+        row = conn.execute(text("SELECT id, triggered_by, started_at, completed_at, status, listings_discovered, listings_added, listings_updated, duplicates_skipped, validation_failures, listings_too_old, since_days, error_count, log_excerpt, progress FROM scraper_runs WHERE id = :id"), {"id": job_id}).mappings().first()
     if not row:
         raise HTTPException(status_code=404, detail="Job not found")
     state = _run_state.get(str(job_id), {}).get("state", dict(row).get("status"))
