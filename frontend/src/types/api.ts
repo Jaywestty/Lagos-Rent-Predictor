@@ -21,7 +21,11 @@ export type ChatAnswer = {
   request_id: string;
   latency_ms: number;
   message: string;
+  comparison?: { options: ComparisonOptionStat[] } | null;
+  budget?: BudgetInfo | null;
 };
+export type ComparisonOptionStat = { label: string; area: string | null; beds: number | null; property_type: string | null; median: number | null; min: number | null; max: number | null; count: number; confidence: "normal" | "limited" | "insufficient"; caveat: string | null };
+export type BudgetInfo = { amount: number; period: "year" | "month"; yearly: number; within_count: number; areas: { area: string; count: number }[]; stretch_count: number };
 export type SseEvent =
   | { type: "status"; request_id: string; text: string }
   | { type: "delta"; request_id: string; text: string }
