@@ -55,11 +55,19 @@ def _annualized_price_expr() -> str:
     return "(CASE WHEN price_period = 'month' THEN price_ngn * 12 ELSE price_ngn END)"
 
 
+def annual_budget(entities: PropertyEntities) -> float | None:
+    """Rent is compared per year: a budget stated per month is multiplied by 12."""
+    if entities.budget_ngn is None:
+        return None
+    period = getattr(entities.budget_period, "value", entities.budget_period)
+    return float(entities.budget_ngn) * (12 if period == "month" else 1)
+
+
 def build_affordability_query(entities: PropertyEntities):
     annual_price = _annualized_price_expr()
     filters = ["is_duplicate_of IS NULL", "price_ngn IS NOT NULL"]
     params: dict[str, Any] = {
-        "stretch_budget": entities.budget_ngn * AFFORDABILITY_STRETCH_FACTOR,
+        "stretch_budget": annual_budget(entities) * AFFORDABILITY_STRETCH_FACTOR,
         "limit": AFFORDABILITY_RESULT_LIMIT,
     }
     filters.append(f"{annual_price} <= :stretch_budget")
@@ -127,8 +135,9 @@ def run_affordability(entities: PropertyEntities) -> dict:
     with engine.connect() as conn:
         rows = [dict(row) for row in conn.execute(stmt, params).mappings().all()]
 
-    within_budget = [r for r in rows if r["annual_price"] <= entities.budget_ngn]
-    stretch = [r for r in rows if r["annual_price"] > entities.budget_ngn]
+    budget = annual_budget(entities)
+    within_budget = [r for r in rows if r["annual_price"] <= budget]
+    stretch = [r for r in rows if r["annual_price"] > budget]
 
     grouped_within: dict[str, list[dict]] = {}
     for row in within_budget:
