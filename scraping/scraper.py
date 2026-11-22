@@ -64,6 +64,7 @@ import logging
 import random
 import re
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, fields
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -522,14 +523,21 @@ def build_page_url(base_url: str, page_param: str, page_num: int, page_start: in
 # --------------------------------------------------------------------------
 
 def _new_stats() -> dict:
-    return {"discovered": 0, "kept": 0, "too_old": 0, "no_date": 0, "no_price": 0, "fetch_failed": 0,
-            "pages_failed": 0, "blocked_sites": []}
+    return {"discovered": 0, "kept": 0, "already_have": 0, "too_old": 0, "no_date": 0, "no_price": 0,
+            "fetch_failed": 0, "pages_failed": 0, "page_load_errors": 0, "blocked_sites": []}
 
 
 def crawl(site: str, category: str, listing_type: str, max_pages: int, inspect: bool = False,
           since_days: int | None = None, output_csv: Path = OUTPUT_CSV,
-          stats: dict | None = None) -> dict:
+          stats: dict | None = None,
+          on_page: Callable[[list[dict]], None] | None = None,
+          known: dict[str, datetime | None] | None = None) -> dict:
     """Crawl one site/category/type.
+
+    on_page receives each finished page's listings (as dicts) right after they are
+    written to the CSV, so the caller can save them to the database immediately.
+    known maps listing URLs already collected recently to their listing date; those
+    detail pages are not fetched again, which lets a stopped run resume quickly.
 
     With since_days set, the run is recency-limited: it starts at the newest
     page (ignoring the resume checkpoint), keeps only listings whose source
@@ -621,6 +629,17 @@ def crawl(site: str, category: str, listing_type: str, max_pages: int, inspect: 
         stats["discovered"] += len(new_urls)
 
         for listing_url in new_urls:
+            if recent_mode and known is not None and listing_url in known:
+                # Collected earlier this week (for example by a run that was stopped): skip the
+                # detail fetch. A recent one still counts as recent so paging carries on past it.
+                seen_urls.add(listing_url)
+                prior = known[listing_url]
+                if prior is not None and prior < cutoff:
+                    stats["too_old"] += 1
+                else:
+                    recent_on_page += 1
+                    stats["already_have"] = stats.get("already_have", 0) + 1
+                continue
             fetcher.polite_sleep()
             detail_soup = fetcher.get(listing_url)
             if detail_soup is None:
@@ -687,6 +706,12 @@ def crawl(site: str, category: str, listing_type: str, max_pages: int, inspect: 
             append_to_csv(page_listings, output_csv)
             total_new += len(page_listings)
             stats["kept"] += len(page_listings)
+            if on_page is not None:
+                try:
+                    on_page([asdict(item) for item in page_listings])
+                except Exception as exc:  # the CSV still has them; the final pass retries the load
+                    stats["page_load_errors"] = stats.get("page_load_errors", 0) + 1
+                    log.error(f"[{site}/{category}/{listing_type}] Saving page {page_num} to the database failed: {exc}")
             log.info(f"[{site}/{category}/{listing_type}] Page {page_num}: "
                      f"{len(page_listings)} new listings (total this run: {total_new})")
         else:
@@ -712,7 +737,9 @@ def crawl(site: str, category: str, listing_type: str, max_pages: int, inspect: 
 # CLI
 # --------------------------------------------------------------------------
 
-def main(argv: list[str] | None = None) -> dict:
+def main(argv: list[str] | None = None,
+         on_page: Callable[[list[dict]], None] | None = None,
+         known: dict[str, datetime | None] | None = None) -> dict:
     parser = argparse.ArgumentParser(description="Scrape Lagos house listings (rent/sale).")
     parser.add_argument("--site", choices=["npc", "propertypro", "all"], default="all")
     parser.add_argument("--category", default="all",
@@ -753,7 +780,8 @@ def main(argv: list[str] | None = None) -> dict:
                     log.info(f"[{site}/{category}/{listing_type}] Skipped: site blocked this run.")
                     continue
                 crawl(site, category, listing_type, args.max_pages, inspect=args.inspect,
-                      since_days=args.since_days, output_csv=output_csv, stats=stats)
+                      since_days=args.since_days, output_csv=output_csv, stats=stats,
+                      on_page=on_page, known=known)
     log.info(f"Run summary: {stats}")
     return stats
 
