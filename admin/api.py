@@ -253,6 +253,16 @@ _RUN_COLUMNS = ("id, triggered_by, started_at, completed_at, status, listings_di
 def active_scrape(request: Request, admin_session: str | None = Cookie(default=None)):
     """The run in progress (with live progress) and the most recent finished run, for the admin progress panel."""
     get_current_admin(request, admin_session)
+    from scraping.runner import close_dead_run, mark_interrupted_runs
+
+    # Never show a ghost: close runs whose heartbeat stopped, and admin runs this server is not running.
+    mark_interrupted_runs()
+    with get_engine().connect() as conn:
+        candidates = conn.execute(text("SELECT id, triggered_by, status, progress FROM scraper_runs "
+                                       "WHERE status IN ('running', 'queued') AND triggered_by LIKE 'admin:%'")).mappings().all()
+    for row in candidates:
+        if not _run_is_alive(row["id"], row):
+            close_dead_run(row["id"])
     with get_engine().connect() as conn:
         active = conn.execute(text(f"SELECT {_RUN_COLUMNS} FROM scraper_runs WHERE status IN ('running', 'queued') "
                                    "ORDER BY started_at DESC LIMIT 1")).mappings().first()
@@ -264,15 +274,45 @@ def active_scrape(request: Request, admin_session: str | None = Cookie(default=N
 
 @router.post("/operations/scrape/{job_id}/stop")
 def stop_scrape(job_id: int, request: Request, admin_session: str | None = Cookie(default=None)):
-    """Ask a running scrape to stop after the listing it is on. Saved pages are kept."""
+    """Ask a running scrape to stop after the listing it is on. Saved pages are kept.
+
+    If the scraper is no longer alive (the server restarted, or no progress for a few minutes),
+    there is nobody to receive the request, so the run is closed straight away.
+    """
     sess = get_current_admin(request, admin_session)
     require_csrf(request, sess)
-    from scraping.runner import request_stop
+    from scraping.runner import close_dead_run, request_stop
 
-    if not request_stop(job_id):
+    with get_engine().connect() as conn:
+        row = conn.execute(text("SELECT triggered_by, status, progress FROM scraper_runs WHERE id = :id"), {"id": job_id}).mappings().first()
+    if not row or row["status"] not in ("running", "queued"):
         raise HTTPException(status_code=409, detail="That run is not running")
+    if not _run_is_alive(job_id, row):
+        close_dead_run(job_id)
+        logger.info("Closed dead scrape run {} from admin ({})", job_id, sess.get("email"))
+        return {"ok": True, "job_id": job_id, "closed": True}
+    request_stop(job_id)
     logger.info("Stop requested for scrape run {} by {}", job_id, sess.get("email"))
-    return {"ok": True, "job_id": job_id}
+    return {"ok": True, "job_id": job_id, "closed": False}
+
+
+DEAD_HEARTBEAT_SECONDS = 180
+
+
+def _run_is_alive(job_id: int, row) -> bool:
+    """Admin runs live in this process: alive only while this process holds the scrape lock for it.
+    Other runs (scheduled task) are alive while their progress heartbeat is recent."""
+    if str(row["triggered_by"]).startswith("admin:"):
+        return _scrape_lock.locked() and str(job_id) in _run_state and _run_state[str(job_id)].get("state") in ("queued", "running")
+    progress = row["progress"] or {}
+    beat = progress.get("heartbeat_at") if isinstance(progress, dict) else None
+    if not beat:
+        return False
+    try:
+        age = (datetime.now(UTC) - datetime.fromisoformat(beat)).total_seconds()
+    except ValueError:
+        return False
+    return age < DEAD_HEARTBEAT_SECONDS
 
 
 @router.get("/operations/scrape/{job_id}")
