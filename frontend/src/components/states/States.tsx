@@ -24,8 +24,20 @@ export function NoDataState({ suggestions = [], onPick }: { suggestions?: string
   );
 }
 
-export function OutOfScopeState() {
-  return <section className="card rise p-6" aria-label="Out of scope"><h2 className="text-[17px] font-semibold">Outside rent research</h2><p className="muted mt-1 text-[15px]">This assistant covers yearly rent in Lagos only.</p></section>;
+const IN_SCOPE_EXAMPLES = ["2 bedroom rent in Yaba", "Self contain under ₦1M", "Lekki or Ajah for a 3 bedroom?", "Is agent fee negotiable?"];
+
+export function OutOfScopeState({ message, onAsk }: { message?: string; onAsk?: (q: string) => void }) {
+  return (
+    <section className="card rise p-6" aria-label="Out of scope">
+      <h2 className="text-[18px] font-bold">That is outside what I can help with</h2>
+      <p className="muted mt-1 text-[15px] leading-relaxed">{message || "I only answer questions about renting in Lagos: prices, budgets, areas and renting advice."}</p>
+      {onAsk && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {IN_SCOPE_EXAMPLES.map((q) => <button key={q} type="button" className="chip" onClick={() => onAsk(q)}>{q}</button>)}
+        </div>
+      )}
+    </section>
+  );
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
