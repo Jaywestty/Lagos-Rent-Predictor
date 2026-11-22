@@ -31,7 +31,11 @@ def apply_schema(engine, schema_path):
 
 
 def load_csv(csv_path):
-    df = pd.read_csv(csv_path)
+    return prepare_frame(pd.read_csv(csv_path))
+
+
+def prepare_frame(df):
+    """Type and rename raw scraper rows (from a CSV or straight from the scraper)."""
     df = df.rename(columns={"location": "location_raw"})
 
     for col in ["bedrooms", "bathrooms", "toilets", "parking"]:
@@ -235,6 +239,25 @@ def _existing_urls(urls, engine):
     with engine.connect() as conn:
         rows = conn.execute(text("SELECT url FROM listings WHERE url = ANY(:urls)"), {"urls": list(urls)}).all()
     return {r[0] for r in rows}
+
+
+def load_records(records, engine=None):
+    """Load one page of freshly scraped listings straight into the database.
+
+    Used during a run so every page is saved as soon as it is scraped; stopping a run
+    never loses finished pages. Cross-page de-duplication and the quality report
+    happen in the final load_csv_to_db pass over the whole run file.
+    """
+    if not records:
+        return {"rows": 0, "added": 0, "updated": 0}
+    engine = engine or get_engine()
+    df = prepare_frame(pd.DataFrame(records))
+    df = df.drop_duplicates(subset=["url"], keep="last").reset_index(drop=True)
+    df = apply_location_normalization(df)
+    existing = _existing_urls(df["url"].tolist(), engine)
+    upsert_listings(df, engine)
+    upsert_location_aliases(df, engine)
+    return {"rows": len(df), "added": len(df) - len(existing), "updated": len(existing)}
 
 
 def load_csv_to_db(csv_path, report_out="data/quality_report.json", schema_path="sql/schema.sql", engine=None):
