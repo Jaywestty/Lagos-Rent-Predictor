@@ -108,6 +108,8 @@ def _enrich_with_contract(legacy: dict, entities, request_id: str, latency_ms: f
         payload["answer"]["listing_count"] = sum(counts)
     if entities.query_type == QueryType.AFFORDABILITY:
         payload["answer"]["budget"] = _budget_contract(payload, entities)
+    if payload["answer"].get("status") == "no_data":
+        payload["answer"]["no_data"] = _no_data_help(entities)
     is_sale = bool(entities.listing_type and entities.listing_type.value == "sale")
     if is_sale:
         payload["answer"]["status"] = "out_of_scope"
@@ -170,6 +172,36 @@ def _comparison_contract(entities) -> dict | None:
             "caveat": "Area-level only: there is no mainland/island filter, so this covers all of Lagos for this size." if region_only else None,
         })
     return {"options": options} if options else None
+
+
+def _no_data_help(entities) -> dict:
+    """Why a search found nothing, and what to try instead: a spelling fix, other sizes in the
+    same area, or the busiest covered areas. Everything here comes from the listings table."""
+    from rapidfuzz import fuzz, process
+
+    from query.market import list_areas
+
+    asked = (entities.area or "").strip()
+    try:
+        covered = list_areas()
+    except Exception as exc:
+        logger.warning("no-data help unavailable: {}", exc)
+        return {"area": asked or None}
+    names = [a["area"] for a in covered]
+    by_name = {a["area"].lower(): a for a in covered}
+    help_: dict = {"area": asked or None, "covered": False, "area_listings": 0, "did_you_mean": None,
+                   "suggestions": names[:6]}
+    if asked:
+        exact = by_name.get(asked.lower())
+        if exact:
+            help_["covered"] = True
+            help_["area"] = exact["area"]
+            help_["area_listings"] = exact["listing_count"]
+        else:
+            match = process.extractOne(asked, names, scorer=fuzz.WRatio, score_cutoff=86)
+            if match and match[0].lower() != asked.lower():
+                help_["did_you_mean"] = match[0]
+    return help_
 
 
 def _budget_contract(legacy: dict, entities) -> dict | None:
