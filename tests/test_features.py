@@ -69,3 +69,20 @@ def test_guide_sections_are_cleaned_and_source_ids_bounded():
     assert overview == {"key": "overview", "title": "Overview", "text": "Busy tech hub.", "sources": [1, 2]}
     assert next(s for s in out["sections"] if s["key"] == "power")["text"] is None
     assert out["watch_outs"] == ["Flooding on main roads."]
+
+
+def test_prepare_frame_types_scraper_rows():
+    import pandas as pd
+
+    from pipeline.load_data import prepare_frame
+
+    df = prepare_frame(pd.DataFrame([{
+        "source": "propertypro", "listing_type": "rent", "url": "https://propertypro.ng/property/x-AAAAA",
+        "title": "Flat", "price_raw": "N1", "price_ngn": "1500000", "price_period": None, "location": "Yaba, Lagos",
+        "bedrooms": "2", "bathrooms": None, "toilets": None, "parking": None, "property_type": "Flat",
+        "scraped_at": "2026-11-21T08:00:00Z", "listed_at": "2026-11-20T10:00:00+01:00",
+    }]))
+    assert "location_raw" in df.columns and "location" not in df.columns
+    assert df.loc[0, "price_ngn"] == 1500000
+    assert int(df.loc[0, "bedrooms"]) == 2
+    assert str(df.loc[0, "listed_at"].tz) == "UTC"

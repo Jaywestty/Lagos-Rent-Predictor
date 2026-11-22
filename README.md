@@ -12,14 +12,14 @@ Ask a question in plain language, such as *"How much is a 2 bedroom in Yaba?"*, 
 - **Compare areas.** Up to three areas side by side for a chosen size.
 - **Move-in cost calculator.** Yearly rent plus agency, legal and caution fees, service charge and moving costs.
 - **Saved searches and favourites.** Kept per device, no sign-up.
-- **Weekly data refresh.** A scheduled job collects listings from the last 7 days and loads them automatically.
+- **Weekly data refresh.** A scheduled task collects listings from the last 7 days and loads them automatically.
 - **Private admin console.** Usage analytics, scraper operations, and full observability: traffic, latency, errors, AI call costs and data quality.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    Cron[GitHub Actions, weekly] --> Scraper[Scraper: last 7 days]
+    Cron[Weekly task on a local machine] --> Scraper[Scraper: last 7 days]
     Scraper --> Loader[Loader: clean, dedupe, upsert]
     Loader --> DB[(PostgreSQL / Supabase)]
     Loader --> Snap[Weekly price snapshots]
@@ -33,7 +33,7 @@ flowchart LR
     Obs --> DB
 ```
 
-1. **Collect.** Every Monday at 02:00 Lagos time, a GitHub Actions workflow scrapes rent listings from NigeriaPropertyCentre and PropertyPro, newest first. It keeps only listings dated within the last 7 days.
+1. **Collect.** Every Monday a scheduled task scrapes rent listings from public Nigerian property sites. It keeps only listings dated within the last 7 days, and respects each site's robots.txt.
 2. **Load.** Listings are normalised (area names, monthly to yearly prices), de-duplicated, and upserted into Postgres. Weekly price snapshots are recomputed for trends.
 3. **Answer.** The API extracts what the user is asking, queries matching listings, and returns a typed answer with figures, range method and confidence.
 
@@ -47,7 +47,7 @@ flowchart LR
 | Scraping | requests, BeautifulSoup |
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS, TanStack Query |
 | Tooling | uv, Ruff, mypy, pytest, Vitest, ESLint |
-| Scheduling | GitHub Actions |
+| Scheduling | Windows Task Scheduler, GitHub Actions (manual runs) |
 
 ## Getting started
 
@@ -113,14 +113,30 @@ Admin sessions use Argon2-hashed passwords, HttpOnly cookies, CSRF tokens on eve
 
 ## Scheduled scraping
 
-`.github/workflows/weekly-scrape.yml` runs every Monday at 01:00 UTC on GitHub's servers. It also has a **Run workflow** button in the Actions tab for manual runs.
+Some listing sites refuse requests from cloud servers, so the weekly run happens on a local Windows machine with Windows Task Scheduler:
 
-To enable it, add these repository secrets under *Settings → Secrets and variables → Actions*:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\register-weekly-task.ps1
+```
 
-- `DATABASE_URL` (required)
-- `GROQ_API_KEY`, `TAVILY_API_KEY` (optional, for pre-building area guides)
+This registers **Lagos Rent weekly scrape** for every Monday at midnight (00:00). Add `-StartDate 2026-11-30` to choose the first run. If the machine is off or asleep then, Windows runs it at the next opportunity. Each run looks back 7 days, so a late run misses nothing. The task needs an internet connection and the `.env` file in the project folder. Logs are written to `logs\weekly-scrape-*.log` and kept for 60 days.
 
-Scheduled workflows run only from the default branch. Each run uploads its CSV and quality report as a workflow artifact for 30 days.
+Run it now, or remove it:
+
+```powershell
+Start-ScheduledTask -TaskName "Lagos Rent weekly scrape"
+Unregister-ScheduledTask -TaskName "Lagos Rent weekly scrape"
+```
+
+A site that refuses access is skipped for that run and the run is marked *partial* (or *failed* if nothing was collected), visible in the admin console.
+
+**Stopping and resuming.** Each page is saved to the database as soon as it is scraped, so a run can be stopped at any time without losing finished pages. Starting it again skips listings saved in the last 72 hours (`--resume-hours`), so it carries on from where it stopped. A run that was stopped shows as *interrupted*. To load the file of a run that was stopped by an older version of the code:
+
+```powershell
+uv run python -m entrypoints.cli load-run
+```
+
+`.github/workflows/weekly-scrape.yml` is kept for manual cloud runs (**Run workflow** in the Actions tab) of sites that allow cloud traffic. It needs the `DATABASE_URL` repository secret, plus `GROQ_API_KEY` and `TAVILY_API_KEY` to pre-build area guides.
 
 ## Testing and quality
 

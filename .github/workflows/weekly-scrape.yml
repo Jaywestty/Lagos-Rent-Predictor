@@ -1,15 +1,18 @@
 name: Weekly scrape
 
-# Once a week: scrape rent listings from the last 7 days and load them into the database.
+# Scrape rent listings from the last 7 days and load them into the database.
+# Manual only: some listing sites refuse requests from cloud servers, so the weekly
+# run happens on a local machine (scripts/register-weekly-task.ps1). Use the
+# "Run workflow" button for a cloud run of sites that allow it.
 on:
-  schedule:
-    # Mondays 01:00 UTC = 02:00 Africa/Lagos
-    - cron: "0 1 * * 1"
   workflow_dispatch:
     inputs:
       since_days:
         description: "Only keep listings from the last N days"
         default: "7"
+      site:
+        description: "Which site to scrape (npc, propertypro or all)"
+        default: "propertypro"
       max_pages:
         description: "Upper bound on pages per site/category"
         default: "30"
@@ -46,7 +49,8 @@ jobs:
           uv run python -m entrypoints.cli weekly-scrape
           --since-days "${{ inputs.since_days || '7' }}"
           --max-pages "${{ inputs.max_pages || '30' }}"
-          --triggered-by "github-actions:${{ github.event_name }}"
+          --site "${{ inputs.site || 'propertypro' }}"
+          --triggered-by "github-actions:manual"
 
       - name: Pre-build area guides for the top areas
         # Optional: needs GROQ_API_KEY and TAVILY_API_KEY secrets. A failure here never fails the scrape.
