@@ -100,6 +100,14 @@ def _enrich_with_contract(legacy: dict, entities, request_id: str, latency_ms: f
     payload = legacy if isinstance(legacy, dict) else {"message": str(legacy)}
     payload["answer"] = contract.model_dump(mode="json")
     payload["answer"]["message"] = payload.get("message", "")
+    if entities.query_type == QueryType.COMPARISON:
+        comparison = _comparison_contract(entities)
+        payload["answer"]["comparison"] = comparison
+        counts = [o["count"] for o in (comparison or {}).get("options", [])]
+        payload["answer"]["status"] = "success" if any(counts) else "no_data"
+        payload["answer"]["listing_count"] = sum(counts)
+    if entities.query_type == QueryType.AFFORDABILITY:
+        payload["answer"]["budget"] = _budget_contract(payload, entities)
     is_sale = bool(entities.listing_type and entities.listing_type.value == "sale")
     if is_sale:
         payload["answer"]["status"] = "out_of_scope"
@@ -114,8 +122,88 @@ def _enrich_with_contract(legacy: dict, entities, request_id: str, latency_ms: f
     return payload
 
 
+MAX_QUESTION_CHARS = 400
+OUT_OF_SCOPE_MESSAGE = (
+    "I can only help with renting in Lagos: prices by area and size, budgets, comparing areas, "
+    "and practical renting advice. Try something like \"2 bedroom rent in Yaba\"."
+)
+# Obvious attempts to override the assistant. Caught before any AI call, so they cost nothing.
+_INJECTION = re.compile(
+    r"((ignore|disregard|forget|override) (?:(?:all|any|the|your|my|of|these|those|previous|prior|above|earlier)\s+){0,4}"
+    r"(instructions|prompts?|rules|guidelines)"
+    r"|(reveal|show|print|repeat|leak) (me )?(your|the) (system )?(prompt|instructions|rules)"
+    r"|system prompt|developer mode|jailbreak|you are now|pretend (to be|you are)|act as (an?|my) )",
+    re.IGNORECASE,
+)
+
+
+def _out_of_scope_payload(request_id: str, latency_ms: float, message: str = OUT_OF_SCOPE_MESSAGE) -> dict:
+    payload = _error_payload(message, request_id, latency_ms, "out_of_scope")
+    payload["query_type"] = "out_of_scope"
+    return payload
+
+
+def _comparison_contract(entities) -> dict | None:
+    """Side-by-side figures for each option in a comparison, all from listings."""
+    from query.stats import classify, summarize_values
+
+    options = []
+    for opt in entities.comparison_options or []:
+        try:
+            stats = fetch_rent_stats(area=opt.area, beds=opt.beds, property_type=opt.property_type)
+        except Exception as exc:
+            logger.warning("comparison stats failed for {}: {}", opt.label, exc)
+            continue
+        summary = summarize_values(stats["all_values"]) if stats["all_values"] else None
+        _, confidence = classify(len(stats["all_values"]))
+        region_only = opt.area is None and any(t in opt.label.lower() for t in ("mainland", "island"))
+        options.append({
+            "label": opt.label,
+            "area": stats.get("area") or opt.area,
+            "beds": opt.beds,
+            "property_type": opt.property_type,
+            "median": summary["median"] if summary else None,
+            "min": summary["min"] if summary else None,
+            "max": summary["max"] if summary else None,
+            "count": summary["count"] if summary else 0,
+            "confidence": confidence,
+            "caveat": "Area-level only: there is no mainland/island filter, so this covers all of Lagos for this size." if region_only else None,
+        })
+    return {"options": options} if options else None
+
+
+def _budget_contract(legacy: dict, entities) -> dict | None:
+    from query.query_engine import annual_budget
+
+    yearly = annual_budget(entities)
+    if yearly is None:
+        return None
+    period = getattr(entities.budget_period, "value", entities.budget_period)
+    areas = [{"area": a.get("area"), "count": a.get("matched_count", 0)} for a in legacy.get("areas") or []]
+    stretch = sum(len(s.get("results") or []) for s in legacy.get("stretch_options") or [])
+    return {
+        "amount": float(entities.budget_ngn),
+        "period": period,
+        "yearly": yearly,
+        "within_count": int(legacy.get("matched_count") or 0),
+        "areas": areas[:6],
+        "stretch_count": stretch,
+    }
+
+
 _PRICE_QUESTION = re.compile(r"\b(how much|price|prices|cost|rent|rents|budget|afford|cheap|expensive)\b", re.IGNORECASE)
 _BEDS_IN_TEXT = re.compile(r"\b([1-9])\s*-?\s*(?:bed|bedroom|bedrooms|br)\b", re.IGNORECASE)
+
+
+def _area_named_in(question: str) -> str | None:
+    """A known Lagos area mentioned in the text, longest names first ("Victoria Island" before "Island")."""
+    from scraping.location_normalizer import KNOWN_AREAS
+
+    text = f" {(question or '').lower()} "
+    for area in sorted(KNOWN_AREAS, key=len, reverse=True):
+        if re.search(rf"(?<![a-z]){re.escape(area.lower())}(?![a-z])", text):
+            return area
+    return None
 
 
 def _route_price_questions_to_listings(question: str, entities):
@@ -124,9 +212,12 @@ def _route_price_questions_to_listings(question: str, entities):
     The extractor sometimes labels "how much is a 2 bedroom in Lekki?" as advice; web results then
     quote sale prices or stale figures. Rent figures must stay traceable to listings.
     """
-    if entities.query_type != QueryType.ADVICE or not entities.area or not _PRICE_QUESTION.search(question or ""):
+    if entities.query_type != QueryType.ADVICE or not _PRICE_QUESTION.search(question or ""):
         return entities
-    update = {"query_type": QueryType.LOOKUP}
+    area = entities.area or _area_named_in(question)
+    if not area:
+        return entities
+    update: dict = {"query_type": QueryType.LOOKUP, "area": area}
     if entities.beds is None:
         m = _BEDS_IN_TEXT.search(question)
         if m:
@@ -149,6 +240,15 @@ def query_listings(request: QueryRequest, http_request: Request):
     key = _resolve_key(request, http_request.headers)
     if key and key in _idempotency_cache:
         return _idempotency_cache[key]
+    question = (request.query or "").strip()
+    if not question:
+        return _error_payload("Type a question about rent in Lagos.", request_id, (time.perf_counter() - t0) * 1000, "clarification")
+    if len(question) > MAX_QUESTION_CHARS:
+        return _error_payload(f"Please keep your question under {MAX_QUESTION_CHARS} characters.", request_id,
+                              (time.perf_counter() - t0) * 1000, "clarification")
+    if _INJECTION.search(question):
+        logger.info("Blocked instruction-override attempt: {}", question[:120])
+        return _out_of_scope_payload(request_id, (time.perf_counter() - t0) * 1000)
     start_trace()
     previous_entities = load_session_entities(request.session_id) if request.session_id else None
     try:
@@ -171,6 +271,8 @@ def query_listings(request: QueryRequest, http_request: Request):
     if not request.query or not str(request.query).strip():
         latency_ms = (time.perf_counter() - t0) * 1000
         return _error_payload("Query text is empty.", request_id, latency_ms, "clarification")
+    if entities.query_type == QueryType.OUT_OF_SCOPE:
+        return _out_of_scope_payload(request_id, (time.perf_counter() - t0) * 1000)
     entities = _route_price_questions_to_listings(request.query, entities)
     query_type_value = entities.query_type.value
     try:
@@ -189,6 +291,8 @@ def query_listings(request: QueryRequest, http_request: Request):
         elif entities.query_type == QueryType.ADVICE:
             with trace_stage("advice_synthesis", query_type_value):
                 result = answer_advice_query(entities.resolved_query or request.query)
+            if isinstance(result, dict) and result.get("query_type") == "out_of_scope":
+                return _out_of_scope_payload(request_id, (time.perf_counter() - t0) * 1000)
         else:
             latency_ms = (time.perf_counter() - t0) * 1000
             return _error_payload(f"Query type '{entities.query_type.value}' is not supported.", request_id, latency_ms, "out_of_scope")
