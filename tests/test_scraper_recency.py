@@ -103,3 +103,66 @@ def test_run_status_reflects_blocked_sites():
     assert run_status({"blocked_sites": [], "kept": 0}) == "success"
     assert run_status({"blocked_sites": ["npc"], "kept": 40}) == "partial"
     assert run_status({"blocked_sites": ["npc", "propertypro"], "kept": 0}) == "failed"
+
+
+class _TwoPageFetcher:
+    """Page 0 has a known listing and a new one; page 1 has one new listing; then nothing."""
+
+    def __init__(self, fresh):
+        self.fresh = fresh
+        self.detail_calls: list[str] = []
+        self.pages = 0
+        self.last_status = 200
+
+    def get(self, url):
+        if "/property/" in url:
+            self.detail_calls.append(url)
+            return _soup(f"<h1>Flat</h1><p>&#8358;2,000,000/year Last updated {self.fresh:%Y-%m-%d %H:%M:%S}</p>")
+        self.pages += 1
+        links = {
+            1: ['KNOWN', 'NEWAA'],
+            2: ['NEWBB'],
+        }.get(self.pages, [])
+        return _soup("".join(f'<a href="/property/2-bedroom-flat-apartment-for-rent-yaba-lagos-{c}">x</a>' for c in links))
+
+    @staticmethod
+    def polite_sleep():
+        pass
+
+
+def test_known_listings_are_skipped_and_each_page_is_saved(tmp_path):
+    now = datetime.now(UTC)
+    fake = _TwoPageFetcher(fresh=now - timedelta(days=1))
+    known_url = "https://propertypro.ng/property/2-bedroom-flat-apartment-for-rent-yaba-lagos-KNOWN"
+    saved_pages: list[list[dict]] = []
+    with patch.object(scraper, "Fetcher", return_value=fake):
+        stats = scraper.crawl("propertypro", "flat-apartment", "rent", max_pages=5, since_days=7,
+                              output_csv=tmp_path / "run.csv", on_page=saved_pages.append,
+                              known={known_url: now - timedelta(days=2)})
+    # The known listing was never fetched again, but paging carried on past it.
+    assert known_url not in fake.detail_calls
+    assert stats["already_have"] == 1
+    assert stats["kept"] == 2
+    # Each page was handed over for saving as soon as it finished.
+    assert [len(p) for p in saved_pages] == [1, 1]
+    assert saved_pages[0][0]["url"].endswith("NEWAA")
+
+
+def test_a_failing_page_save_does_not_stop_the_run(tmp_path):
+    fake = _TwoPageFetcher(fresh=datetime.now(UTC) - timedelta(days=1))
+
+    def broken(_records):
+        raise RuntimeError("database down")
+
+    with patch.object(scraper, "Fetcher", return_value=fake):
+        stats = scraper.crawl("propertypro", "flat-apartment", "rent", max_pages=5, since_days=7,
+                              output_csv=tmp_path / "run.csv", on_page=broken)
+    assert stats["kept"] == 3
+    assert stats["page_load_errors"] == 2
+    assert len((tmp_path / "run.csv").read_text(encoding="utf-8").splitlines()) == 4  # header + 3, kept for the final pass
+
+
+def test_partial_counts_already_saved_listings():
+    from scraping.runner import run_status
+
+    assert run_status({"blocked_sites": ["npc"], "kept": 0, "already_have": 12}) == "partial"
