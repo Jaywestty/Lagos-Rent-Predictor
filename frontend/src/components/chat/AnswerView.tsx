@@ -30,7 +30,7 @@ export function AnswerView({ result, question, onAsk, onRetry, suggestions }: Pr
       </div>
     );
   }
-  if (answer.status === "no_data") return <NoDataState suggestions={suggestions.slice(0, 4)} onPick={(a) => onAsk(`How much is rent in ${a}?`)} />;
+  if (answer.status === "no_data") return <NoDataState help={answer.no_data} question={question} suggestions={suggestions} onAsk={onAsk} />;
   if (answer.status === "out_of_scope") return <OutOfScopeState message={answer.message} onAsk={onAsk} />;
   if (answer.status === "clarification") {
     return (
