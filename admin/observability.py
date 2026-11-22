@@ -132,6 +132,8 @@ def overview(request: Request, hours: int = Query(24, ge=1, le=24 * 90), admin_s
         health.append({"level": "critical", "text": f"Last scrape run failed{blocked_note}"})
     elif last and last["status"] == "partial":
         health.append({"level": "warning", "text": f"Last scrape run was partial{blocked_note}"})
+    elif last and last["status"] == "interrupted":
+        health.append({"level": "warning", "text": "Last scrape run was stopped before finishing. Pages it saved are kept; the next run continues from there."})
     if last and last["started_at"] and last["started_at"] < now - timedelta(days=8):
         health.append({"level": "warning", "text": "No scrape run in over 8 days"})
     if not last:
