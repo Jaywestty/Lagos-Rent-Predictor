@@ -18,10 +18,10 @@ describe("scrape progress", () => {
     expect(screen.getByRole("progressbar", { name: "Current page" }).getAttribute("aria-valuenow")).toBe("40");
   });
 
-  it("falls back to saved counts for runs without progress and offers no stop button", () => {
+  it("falls back to saved counts for runs without progress and can still be stopped", () => {
     render(<ScrapeProgress run={base} onStop={vi.fn()} />);
     expect(screen.getByText("12")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Stop scrape" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Stop scrape" })).toBeTruthy();
   });
 
   it("asks before stopping and calls onStop", async () => {
