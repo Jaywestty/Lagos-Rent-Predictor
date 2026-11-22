@@ -10,6 +10,11 @@ vi.mock("../src/services/api", () => ({
   newRequestKey: () => "key-1",
   track: vi.fn(),
   saveSearch: vi.fn(),
+  getThread: vi.fn(),
+  getThreads: vi.fn(async () => []),
+  deleteThread: vi.fn(),
+  deleteAllThreads: vi.fn(),
+  newThreadId: () => "6f1c2d3e-0000-4000-8000-000000000001",
 }));
 
 function wrap() {
