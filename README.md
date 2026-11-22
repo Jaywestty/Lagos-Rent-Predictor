@@ -31,6 +31,7 @@ Finding a place to rent in Lagos is hard to do well:
 ### Principles
 
 - **Every price comes from a real listing.** The AI only reads your question; it never invents prices. Rent figures are calculated from stored listings, and each answer links back to them.
+- **Plain words.** Answers say "typical rent" and "range", never statistics jargon.
 - **Honest about uncertainty.** Answers show how many listings they rest on, and flag listings whose price looks mistyped.
 - **Fresh data.** Listings are collected weekly, and only those posted in the last 7 days are added.
 - **Stays on topic, and safe.** Adugbo AI only answers questions about renting in Lagos. Anything else, and any attempt to change its instructions, gets a polite refusal before an AI or web search is even called. Text from the web is treated as data, never as instructions, prices in web text are removed, and links in answers can only point at the cited sources.
@@ -59,6 +60,24 @@ The mascot, Adugbo, is a friendly house-headed robot with a map pin on its roof.
 3. **Follow up** in the same chat ("what about a 3 bedroom?"). The app remembers what you were asking about.
 4. **Open your chats** any time from *Your chats*, start a *New chat*, or delete old ones.
 5. **Explore** *Area guides*, *Compare*, *Move-in cost* and *Saved* from the top menu.
+
+### When an area isn't covered yet
+
+Adugbo AI never guesses a price. If there are no recent listings for what you asked, it says why and offers the next step:
+
+| You asked | What you see |
+| --- | --- |
+| A misspelt area, like "self contain in **Yabba**" | "Did you mean **Yaba**?" with a one-tap button that reruns your question for Yaba |
+| A covered area but an uncommon size, like "5 bedroom flat in Yaba" | "We have 24 recent listings in Yaba, just none of that size", with a button to see all of Yaba |
+| An area with no listings yet, like "2 bedroom in **Badagry**" | "We don't cover Badagry yet", why (new listings arrive weekly, mostly from the busiest areas), a button to ask what living in Badagry is like, and the busiest covered areas to try instead |
+
+### Install it as an app
+
+Adugbo AI is a web app you can install. It then opens full screen from your home screen or desktop like any other app, starts quickly, and the pages you opened still load without a connection (new answers need one).
+
+- **Android (Chrome):** tap **Install app** in the menu, or Chrome's *Install app* / *Add to Home screen* prompt.
+- **iPhone or iPad (Safari):** tap **Share**, then **Add to Home Screen**. The app's *Install app* button shows these steps.
+- **Computer (Chrome or Edge):** click **Install app** in the header, or the install icon in the address bar.
 
 ---
 
@@ -96,7 +115,7 @@ flowchart LR
 | Data | PostgreSQL (Supabase), pandas, RapidFuzz |
 | AI | Groq (question understanding, guide writing), Tavily (web search) |
 | Scraping | requests, BeautifulSoup |
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS, TanStack Query |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, TanStack Query; installable PWA (web manifest + service worker) |
 | Tooling | uv, Ruff, mypy, pytest, Vitest, ESLint |
 | Hosting | Vercel (frontend), Render (API), Supabase (database), Windows Task Scheduler (weekly scrape) |
 
@@ -164,10 +183,30 @@ It covers usage analytics, scraper operations (live progress with a Stop button)
 
 ### Deployment
 
-- **Frontend on Vercel.** Project root `frontend`. `frontend/vercel.json` serves the single-page app and forwards `/api/*` to the API, so the browser sees one origin (cookies and CORS just work). Replace `YOUR-RENDER-SERVICE` in it with your Render service name.
-- **API on Render.** `render.yaml` is a ready Blueprint: build `uv sync --frozen --no-dev`, start `uvicorn entrypoints.api:app`, health check `/health`. Set `DATABASE_URL`, `GROQ_API_KEY` and `TAVILY_API_KEY` in Render.
-- **Database on Supabase.** Run `uv run python -m entrypoints.cli migrate` once against it.
-- **Scraping** stays on a local machine (see above). It writes to the same database.
+Three hosts, one database:
+
+| Part | Host | Config |
+| --- | --- | --- |
+| Web app (installable PWA) | Vercel | `frontend/vercel.json` |
+| API | Render | `render.yaml` (Blueprint) |
+| Database | Supabase | `DATABASE_URL` |
+| Weekly scrape | Your Windows machine | `scripts/register-weekly-task.ps1` |
+
+Vercel forwards `/api/*` and `/health` to the Render API, so the browser only ever talks to one address: the admin login cookie works and no CORS setup is needed.
+
+1. **Merge to `main`.** Both hosts deploy from `main`.
+2. **Database.** With `DATABASE_URL` in your local `.env` pointing at Supabase, run `uv run python -m entrypoints.cli migrate` once (safe to repeat).
+3. **API on Render.** Dashboard → **New → Blueprint** → pick this repository. Render reads `render.yaml` and creates `adugbo-ai-api`. Fill in `DATABASE_URL`, `GROQ_API_KEY` and `TAVILY_API_KEY` (leave `ALLOWED_ORIGINS` empty) → **Apply**. When it is live, `https://<service>.onrender.com/health` returns `{"status":"ok"}`.
+4. **Point the web app at the API.** `frontend/vercel.json` forwards to `https://adugbo-ai-api.onrender.com`. If Render gave your service a different address, change it in the two `rewrites` lines and push.
+5. **Web app on Vercel.** **Add New → Project** → import this repository → **Root Directory** `frontend` (Vercel detects Vite: build `npm run build`, output `dist`) → no environment variables → **Deploy**.
+6. **Check it.** Open the Vercel address: ask a question, open *Your chats*, install the app, then sign in at `/admin` (accounts come from `create-admin`).
+7. **Keep data fresh.** Leave the weekly scheduled task on your machine; it writes to the same Supabase database, so the live site updates every Monday.
+
+Notes:
+
+- Render's free plan sleeps after 15 idle minutes; the first request afterwards takes about a minute and can time out once. The Starter plan stays awake.
+- Do not run *Run scrape* from the live admin: some listing sites refuse cloud servers, so a scrape from Render would miss them. Use the scheduled task.
+- Each push to `main` redeploys both automatically. The service worker picks up a new version on the next visit.
 
 ### Testing and quality
 
@@ -191,7 +230,7 @@ observability/  Request, error, AI-call and usage event recording
 pipeline/       Loader with de-duplication and a quality report
 query/          Question parsing, SQL queries, stats, trends and answer shape
 scraping/       Scrapers, location normaliser, and the scrape-and-load runner
-scripts/        Windows scheduled-task scripts
+scripts/        Windows scheduled-task scripts and the app icon generator
 sql/            Base schema and numbered migrations
 frontend/       React web app and admin console
 tests/          Backend tests
