@@ -135,16 +135,45 @@ def weekly_scrape(
     site: str = typer.Option("all", help="npc, propertypro or all."),
     category: str = typer.Option("all", help="One category or all."),
     triggered_by: str = typer.Option("cli", help="Recorded in scraper_runs.triggered_by."),
+    resume_hours: int = typer.Option(72, help="Skip listings saved in the last N hours (0 re-fetches everything)."),
 ):
-    """Migrate, scrape recent rent listings, and load them into the database."""
+    """Migrate, scrape recent rent listings, and save each page to the database as it goes.
+
+    Safe to stop at any time: finished pages are already saved, and running it again
+    skips listings saved in the last --resume-hours, so it continues where it stopped.
+    """
     from analytics_logging import apply_migrations
     from scraping.runner import run_scrape
 
     apply_migrations()
-    result = run_scrape(triggered_by=triggered_by, max_pages=max_pages, since_days=since_days, site=site, category=category)
-    typer.echo(f"Run {result['run_id']} ({result['status']}): scrape={result['scrape']} load={result['load']}")
+    result = run_scrape(triggered_by=triggered_by, max_pages=max_pages, since_days=since_days, site=site,
+                        category=category, resume_hours=resume_hours)
+    saved = result["saved"]
+    typer.echo(f"Run {result['run_id']} ({result['status']}): {saved['added']} new and {saved['updated']} updated listings "
+               f"saved, {result['scrape'].get('already_have', 0)} skipped as already saved. scrape={result['scrape']}")
     if result["status"] == "partial":
         typer.echo(f"Warning: these sites refused access and were skipped: {', '.join(result['scrape']['blocked_sites'])}")
+
+
+@app.command()
+def load_run(csv: str = typer.Argument(None, help="Run CSV to load. Defaults to the newest file in data/raw/runs.")):
+    """Load a stopped run's CSV into the database and refresh price trends."""
+    from pathlib import Path
+
+    from pipeline.load_data import load_csv_to_db
+    from query.market import write_snapshots
+    from scraping.runner import RUNS_DIR, mark_run_interrupted
+
+    path = Path(csv) if csv else max(RUNS_DIR.glob("run_*.csv"), key=lambda f: f.stat().st_mtime, default=None)
+    if path is None or not path.exists():
+        typer.echo("No run CSV found.")
+        raise typer.Exit(1)
+    result = load_csv_to_db(str(path), report_out=str(path.with_suffix(".quality.json")))
+    snapshots = write_snapshots()
+    run_id = int(path.name.split("_")[1]) if path.name.startswith("run_") and path.name.split("_")[1].isdigit() else None
+    marked = mark_run_interrupted(run_id, result) if run_id else False
+    typer.echo(f"Loaded {path.name}: {result['added']} new, {result['updated']} updated, {result['duplicates']} duplicates. "
+               f"Trend rows: {snapshots}." + (f" Run {run_id} marked interrupted." if marked else ""))
 
 
 @app.command()
