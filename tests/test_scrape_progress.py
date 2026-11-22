@@ -70,3 +70,24 @@ def test_admin_scrape_control_requires_auth():
     c = TestClient(app, raise_server_exceptions=False)
     assert c.get("/api/admin/operations/scrape/active").status_code in (401, 403)
     assert c.post("/api/admin/operations/scrape/5/stop").status_code in (401, 403)
+
+
+def test_admin_run_is_dead_when_this_server_is_not_running_it():
+    from admin import api
+
+    row = {"triggered_by": "admin:me@example.com", "status": "running", "progress": None}
+    api._run_state.pop("41", None)
+    assert api._run_is_alive(41, row) is False  # e.g. left over from before a restart
+
+
+def test_scheduled_run_alive_only_with_recent_heartbeat():
+    from admin import api
+
+    fresh = {"triggered_by": "laptop-schedule", "status": "running",
+             "progress": {"heartbeat_at": datetime.now(UTC).isoformat()}}
+    stale = {"triggered_by": "laptop-schedule", "status": "running",
+             "progress": {"heartbeat_at": (datetime.now(UTC) - timedelta(minutes=10)).isoformat()}}
+    silent = {"triggered_by": "laptop-schedule", "status": "running", "progress": None}
+    assert api._run_is_alive(1, fresh) is True
+    assert api._run_is_alive(1, stale) is False
+    assert api._run_is_alive(1, silent) is False
