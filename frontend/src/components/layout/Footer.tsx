@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { timeAgo } from "../../lib/format";
 import { useSiteStats } from "../../lib/useSiteStats";
+import { MascotHead } from "../brand/Mascot";
 
 const EXPLORE = [
   { to: "/", label: "Ask about rent" },
@@ -17,9 +18,9 @@ export function Footer() {
     <footer className="mt-16" style={{ background: "var(--forest)", color: "#e6efe9" }}>
       <div className="mx-auto grid max-w-[1200px] gap-10 px-4 py-12 sm:grid-cols-2 md:px-8 lg:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
         <div className="space-y-3">
-          <p className="font-display text-[22px] font-bold text-white">Lagos Rent</p>
+          <p className="flex items-center gap-3 font-display text-[22px] font-bold text-white"><MascotHead size={44} />Adugbo AI</p>
           <p className="max-w-[320px] text-[14px] leading-relaxed" style={{ color: "#c9d9d0" }}>
-            What rent in Lagos really costs, worked out from listings posted in the last few weeks. Know the going rate before you call an agent.
+            Àdúgbò means neighbourhood. Adugbo AI tells you what rent in each Lagos neighbourhood really costs, worked out from listings posted in the last few weeks.
           </p>
           {s && s.listings > 0 && (
             <p className="tabular text-[13px] font-semibold text-white">{s.listings.toLocaleString("en-NG")} listings across {s.areas} areas</p>
@@ -50,7 +51,7 @@ export function Footer() {
       <div className="border-t" style={{ borderColor: "rgba(255,255,255,.12)" }}>
         <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-3 px-4 py-5 text-[12px] md:px-8" style={{ color: "#b6cdbf" }}>
           <p>Prices from public listings on Nigerian property sites, refreshed weekly{s?.newest ? ` · newest listing ${timeAgo(s.newest)}` : ""}. Area notes are summarised from linked web sources.</p>
-          <p>© {new Date().getFullYear()} Lagos Rent</p>
+          <p>© {new Date().getFullYear()} Adugbo AI</p>
         </div>
       </div>
     </footer>
