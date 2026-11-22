@@ -522,6 +522,32 @@ def build_page_url(base_url: str, page_param: str, page_num: int, page_start: in
 # Main crawl loop
 # --------------------------------------------------------------------------
 
+class ScrapeStopped(Exception):
+    """Raised when a stop was requested; pages finished before it are already saved."""
+
+
+def _check_stop(should_stop: Callable[[], bool] | None) -> None:
+    if should_stop is None:
+        return
+    try:
+        stop = should_stop()
+    except Exception as exc:  # a failed check must not kill the run
+        log.warning(f"Stop check failed: {exc}")
+        return
+    if stop:
+        raise ScrapeStopped("Stop requested")
+
+
+def _emit(callback: Callable[[dict], None] | None, event: dict) -> None:
+    """Progress reporting must never break a scrape."""
+    if callback is None:
+        return
+    try:
+        callback(event)
+    except Exception as exc:
+        log.warning(f"Progress callback failed: {exc}")
+
+
 def _new_stats() -> dict:
     return {"discovered": 0, "kept": 0, "already_have": 0, "too_old": 0, "no_date": 0, "no_price": 0,
             "fetch_failed": 0, "pages_failed": 0, "page_load_errors": 0, "blocked_sites": []}
@@ -531,8 +557,13 @@ def crawl(site: str, category: str, listing_type: str, max_pages: int, inspect: 
           since_days: int | None = None, output_csv: Path = OUTPUT_CSV,
           stats: dict | None = None,
           on_page: Callable[[list[dict]], None] | None = None,
-          known: dict[str, datetime | None] | None = None) -> dict:
+          known: dict[str, datetime | None] | None = None,
+          on_progress: Callable[[dict], None] | None = None,
+          should_stop: Callable[[], bool] | None = None) -> dict:
     """Crawl one site/category/type.
+
+    on_progress receives small events while crawling: "page" when a search page's
+    listings are known, and "listing" after each listing on it is handled.
 
     on_page receives each finished page's listings (as dicts) right after they are
     written to the CSV, so the caller can save them to the database immediately.
@@ -627,8 +658,15 @@ def crawl(site: str, category: str, listing_type: str, max_pages: int, inspect: 
         page_listings = []
         recent_on_page = 0
         stats["discovered"] += len(new_urls)
+        _emit(on_progress, {"event": "page", "site": site, "category": category, "page": page_num,
+                            "page_number": page_num - page_start + 1, "max_pages": pages_to_run,
+                            "page_total": len(new_urls), "page_done": 0, "stats": stats})
 
-        for listing_url in new_urls:
+        for done_on_page, listing_url in enumerate(new_urls, start=1):
+            _check_stop(should_stop)
+            if done_on_page > 1:
+                _emit(on_progress, {"event": "listing", "page_done": done_on_page - 1, "page_total": len(new_urls),
+                                    "stats": stats})
             if recent_mode and known is not None and listing_url in known:
                 # Collected earlier this week (for example by a run that was stopped): skip the
                 # detail fetch. A recent one still counts as recent so paging carries on past it.
@@ -698,6 +736,8 @@ def crawl(site: str, category: str, listing_type: str, max_pages: int, inspect: 
             page_listings.append(listing)
             seen_urls.add(listing_url)
 
+        _emit(on_progress, {"event": "listing", "page_done": len(new_urls), "page_total": len(new_urls), "stats": stats})
+
         if inspect:
             continue
 
@@ -739,7 +779,9 @@ def crawl(site: str, category: str, listing_type: str, max_pages: int, inspect: 
 
 def main(argv: list[str] | None = None,
          on_page: Callable[[list[dict]], None] | None = None,
-         known: dict[str, datetime | None] | None = None) -> dict:
+         known: dict[str, datetime | None] | None = None,
+         on_progress: Callable[[dict], None] | None = None,
+         should_stop: Callable[[], bool] | None = None) -> dict:
     parser = argparse.ArgumentParser(description="Scrape Lagos house listings (rent/sale).")
     parser.add_argument("--site", choices=["npc", "propertypro", "all"], default="all")
     parser.add_argument("--category", default="all",
@@ -763,6 +805,8 @@ def main(argv: list[str] | None = None,
     sites = list(SITE_CONFIGS.keys()) if args.site == "all" else [args.site]
     types = ["rent", "sale"] if args.type == "all" else [args.type]
 
+    # Work out every site/category/type step first, so progress can say "step 3 of 6".
+    plan: list[tuple[str, str, str]] = []
     for site in sites:
         site_categories = list(SITE_CONFIGS[site]["categories"].keys())
         if args.category == "all":
@@ -774,14 +818,17 @@ def main(argv: list[str] | None = None,
                         f"(available: {site_categories}), skipping.")
             continue
 
-        for category in categories:
-            for listing_type in types:
-                if site in stats.get("blocked_sites", []):
-                    log.info(f"[{site}/{category}/{listing_type}] Skipped: site blocked this run.")
-                    continue
-                crawl(site, category, listing_type, args.max_pages, inspect=args.inspect,
-                      since_days=args.since_days, output_csv=output_csv, stats=stats,
-                      on_page=on_page, known=known)
+        plan += [(site, category, listing_type) for category in categories for listing_type in types]
+
+    for step, (site, category, listing_type) in enumerate(plan, start=1):
+        _emit(on_progress, {"event": "step", "step": step, "total_steps": len(plan), "site": site,
+                            "category": category, "stats": stats})
+        if site in stats.get("blocked_sites", []):
+            log.info(f"[{site}/{category}/{listing_type}] Skipped: site blocked this run.")
+            continue
+        crawl(site, category, listing_type, args.max_pages, inspect=args.inspect,
+              since_days=args.since_days, output_csv=output_csv, stats=stats,
+              on_page=on_page, known=known, on_progress=on_progress, should_stop=should_stop)
     log.info(f"Run summary: {stats}")
     return stats
 
