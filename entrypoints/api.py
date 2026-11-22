@@ -1,6 +1,7 @@
 import asyncio
 import contextvars
 import json
+import os
 import re
 import time
 import uuid
@@ -27,12 +28,12 @@ logger.add("logs/app.log", rotation="10 MB", retention="14 days", level="INFO")
 
 @asynccontextmanager
 async def _lifespan(_app):
-    # Admin-started scrapes run inside this process, so any still marked running from a
-    # previous start died with that process. Close them so admin never shows a ghost run.
+    # Close scrape runs whose heartbeat has gone silent (for example killed by a previous restart),
+    # so admin never shows a ghost run. Heartbeat-based, so it is safe with several servers.
     try:
-        from scraping.runner import close_orphaned_admin_runs
+        from scraping.runner import mark_interrupted_runs
 
-        await asyncio.get_running_loop().run_in_executor(None, close_orphaned_admin_runs)
+        await asyncio.get_running_loop().run_in_executor(None, mark_interrupted_runs)
     except Exception as exc:
         logger.warning("could not close orphaned scrape runs: {}", exc)
     yield
@@ -40,6 +41,16 @@ async def _lifespan(_app):
 
 app = FastAPI(title="Lagos House Hunter AI", lifespan=_lifespan)
 install_http_middleware(app)
+
+# Optional: only needed when a browser on another origin calls this API directly (for example
+# VITE_API_BASE_URL pointing at Render). The recommended Vercel setup proxies /api instead.
+_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+if _origins:
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(CORSMiddleware, allow_origins=_origins, allow_credentials=True,
+                       allow_methods=["GET", "POST", "PATCH", "DELETE"],
+                       allow_headers=["Content-Type", "X-Client-Id", "X-Request-Key", "X-CSRF-Token", "X-Request-Id"])
 
 from entrypoints.public_api import router as public_router  # noqa: E402
 
@@ -151,6 +162,12 @@ def query_listings(request: QueryRequest, http_request: Request):
         if key:
             _idempotency_cache[key] = payload
         return payload
+    except Exception as exc:
+        # The AI service is unreachable or failed (network, outage, rate limit). Not cached, so a retry works.
+        latency_ms = (time.perf_counter() - t0) * 1000
+        logger.error("Entity extraction service failed for query='{}': {}", request.query, exc)
+        return _error_payload("We couldn't reach the service that reads your question. Please try again in a moment.",
+                              request_id, latency_ms, "error")
     if not request.query or not str(request.query).strip():
         latency_ms = (time.perf_counter() - t0) * 1000
         return _error_payload("Query text is empty.", request_id, latency_ms, "clarification")
@@ -215,6 +232,13 @@ def query_listings(request: QueryRequest, http_request: Request):
         )
     except Exception as exc:
         logger.warning("question log failed: {}", exc)
+    try:
+        # Chat history: the session id doubles as the thread id; the device id owns the thread.
+        from conversation.history import save_exchange
+
+        save_exchange(http_request.headers.get("x-client-id"), request.session_id, request.query, payload)
+    except Exception as exc:
+        logger.warning("chat history save failed: {}", exc)
     if key:
         _idempotency_cache[key] = payload
     return payload
