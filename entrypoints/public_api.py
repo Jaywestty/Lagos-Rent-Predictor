@@ -19,7 +19,7 @@ from query.response import listing_card
 
 router = APIRouter(prefix="/api", tags=["public"])
 
-ALLOWED_EVENTS = {"move_in_calculator", "compare_view", "guide_view", "trend_view", "listing_click", "chip_click"}
+ALLOWED_EVENTS = {"move_in_calculator", "compare_view", "guide_view", "trend_view", "listing_click", "chip_click", "answer_feedback"}
 
 
 def _client(x_client_id: str | None) -> str:
