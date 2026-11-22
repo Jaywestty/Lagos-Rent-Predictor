@@ -35,6 +35,16 @@ Finding a place to rent in Lagos is hard to do well:
 - **Fresh data.** Listings are collected weekly, and only those posted in the last 7 days are added.
 - **Private by default.** No accounts, no IP addresses, no personal data. History and saved items are tied to a random ID kept in your browser.
 
+### Why there is no sign-up
+
+Lagos Rent has **no user registration, on purpose**. Checking what rent costs should take seconds, not a form, an email confirmation and a password. Asking for nothing also means there is no personal data to protect, leak or sell.
+
+What this means in practice:
+
+- You can use every feature straight away: asking, area guides, comparisons, the move-in calculator, chat history, saved searches and favourites.
+- Your chats and saved items are linked to a random ID stored in your browser. They stay on that browser; they do not follow you to another phone or laptop, and clearing your browser data removes the link to them.
+- The only accounts in the system are for the site's administrators, created from the command line.
+
 ---
 
 ## Using the app
