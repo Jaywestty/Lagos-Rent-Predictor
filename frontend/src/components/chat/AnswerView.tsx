@@ -2,6 +2,7 @@ import type { AskResult } from "../../services/api";
 import { RentAnswer } from "../rent/RentAnswer";
 import { ListingRows } from "../rent/ListingRows";
 import { AdviceAnswer } from "../rent/AdviceAnswer";
+import { ComparisonAnswer } from "../rent/ComparisonAnswer";
 import { ErrorState, NoDataState, OutOfScopeState } from "../states/States";
 
 type Props = {
@@ -17,6 +18,9 @@ export function AnswerView({ result, question, onAsk, onRetry, suggestions }: Pr
   const { answer, listings, advice } = result;
   if (advice) return <AdviceAnswer advice={advice} />;
   if (!answer) return null;
+  if (answer.comparison?.options?.length && answer.status !== "error" && answer.status !== "out_of_scope") {
+    return <ComparisonAnswer answer={answer} />;
+  }
   if (answer.status === "success" || answer.status === "low_data") {
     return (
       <div className="space-y-4">
@@ -27,7 +31,7 @@ export function AnswerView({ result, question, onAsk, onRetry, suggestions }: Pr
     );
   }
   if (answer.status === "no_data") return <NoDataState suggestions={suggestions.slice(0, 4)} onPick={(a) => onAsk(`How much is rent in ${a}?`)} />;
-  if (answer.status === "out_of_scope") return <OutOfScopeState />;
+  if (answer.status === "out_of_scope") return <OutOfScopeState message={answer.message} onAsk={onAsk} />;
   if (answer.status === "clarification") {
     return (
       <section className="card rise p-6" aria-label="Clarification">
