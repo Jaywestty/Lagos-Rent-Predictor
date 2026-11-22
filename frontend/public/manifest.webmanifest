@@ -1,0 +1,25 @@
+{
+  "name": "Adugbo AI · Lagos rent from real listings",
+  "short_name": "Adugbo AI",
+  "description": "Ask what rent costs anywhere in Lagos. Typical rent, the price range and the listings behind it, refreshed weekly. No sign-up.",
+  "id": "/",
+  "start_url": "/?source=app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f6f7f5",
+  "theme_color": "#0f4a37",
+  "lang": "en-NG",
+  "dir": "ltr",
+  "categories": ["lifestyle", "utilities", "productivity"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Ask about rent", "short_name": "Ask", "url": "/?source=shortcut", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Area guides", "short_name": "Areas", "url": "/areas", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Compare areas", "short_name": "Compare", "url": "/compare", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
