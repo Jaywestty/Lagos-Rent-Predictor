@@ -46,3 +46,23 @@ describe("smoke", () => {
     expect(input.value).toBe("rent in Yaba");
   });
 });
+
+import { NoDataState } from "../src/components/states/States";
+import { fireEvent } from "@testing-library/react";
+
+describe("no data", () => {
+  it("offers a spelling fix that keeps the rest of the question", () => {
+    const onAsk = vi.fn();
+    render(<NoDataState help={{ area: "Yabba", did_you_mean: "Yaba", suggestions: ["Lekki"] }} question="self contain in Yabba" onAsk={onAsk} />);
+    expect(screen.getByText("Did you mean Yaba?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Search Yaba instead" }));
+    expect(onAsk).toHaveBeenCalledWith("self contain in Yaba");
+  });
+  it("says plainly when an area is not covered and offers living advice", () => {
+    const onAsk = vi.fn();
+    render(<NoDataState help={{ area: "Badagry", covered: false, suggestions: ["Lekki", "Yaba"] }} question="2 bedroom in Badagry" onAsk={onAsk} />);
+    expect(screen.getByText("We don't cover Badagry yet")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "What is Badagry like to live in?" }));
+    expect(onAsk).toHaveBeenCalledWith("What is it like to live in Badagry, Lagos?");
+  });
+});
