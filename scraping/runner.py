@@ -36,7 +36,10 @@ DEFAULT_RESUME_HOURS = 72
 STALE_RUN_HOURS = 7
 # A run reports progress at least once a minute (each listing takes seconds), so a run whose
 # last progress update is older than this has died (process killed, server restarted, laptop off).
-DEAD_AFTER_MINUTES = 10
+# Several servers can share one database (laptop, Render, a test copy), so liveness is judged only
+# by this heartbeat, never by which server is asking. The longest silent stretch (a slow page with
+# retries, or the final pass) is well under this.
+DEAD_AFTER_MINUTES = 5
 
 _INTERRUPTED_NOTE = "Stopped before finishing. Pages saved before the stop are kept."
 
@@ -59,7 +62,7 @@ class ProgressTracker:
         self.saved = saved
         self.min_interval = min_interval
         self.writer = writer or (lambda progress: update_scraper_run(run_id, progress=progress))
-        self._last_write = 0.0
+        self._last_write = float("-inf")  # first update always writes
         self.state: dict = {
             "phase": "scraping", "step": 0, "total_steps": 0, "site": None, "category": None,
             "page": None, "page_number": 0, "max_pages": None, "page_done": 0, "page_total": 0,
@@ -111,7 +114,7 @@ class StopFlag:
         self.run_id = run_id
         self.min_interval = min_interval
         self.reader = reader or self._read
-        self._last_check = 0.0
+        self._last_check = float("-inf")  # first call always checks
         self._stop = False
 
     def _read(self) -> bool:
@@ -155,18 +158,12 @@ def _close_runs(where_sql: str, params: dict, note: str = _INTERRUPTED_NOTE, eng
 
 def mark_interrupted_runs(engine=None, older_than_hours: int = STALE_RUN_HOURS,
                           dead_after_minutes: int = DEAD_AFTER_MINUTES) -> list[int]:
-    """Close runs that cannot still be alive: too old, or no progress heartbeat for a while."""
+    """Close runs that cannot still be alive: too old, silent heartbeat, or never reported at all."""
     return _close_runs(
         "started_at < now() - make_interval(hours => :h) "
-        "OR (progress ? 'heartbeat_at' AND (progress->>'heartbeat_at')::timestamptz < now() - make_interval(mins => :m))",
+        "OR (progress ? 'heartbeat_at' AND (progress->>'heartbeat_at')::timestamptz < now() - make_interval(mins => :m)) "
+        "OR (progress IS NULL AND started_at < now() - make_interval(mins => :m))",
         {"h": older_than_hours, "m": dead_after_minutes}, engine=engine)
-
-
-def close_orphaned_admin_runs(engine=None) -> list[int]:
-    """Called when the API starts. Admin-started scrapes live inside the API process, so any still
-    marked running from before this start died with the previous process."""
-    return _close_runs("triggered_by LIKE 'admin:%'", {},
-                       note="Stopped when the backend restarted. Pages saved before that are kept.", engine=engine)
 
 
 def close_dead_run(run_id: int, engine=None) -> bool:
