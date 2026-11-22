@@ -410,6 +410,20 @@ async def api_chat_stream(request: QueryRequest, http_request: Request):
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
-@app.get("/health")
+@app.api_route("/", methods=["GET", "HEAD"])
+def root():
+    """A friendly landing reply for anyone who opens the API address directly."""
+    info = {
+        "name": "Adugbo AI API",
+        "status": "ok",
+        "about": "Lagos rent answers from real listings. This is the backend; the app itself is the website.",
+        "health": "/health",
+    }
+    if os.getenv("FRONTEND_URL"):
+        info["app"] = os.getenv("FRONTEND_URL")
+    return info
+
+
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok"}
