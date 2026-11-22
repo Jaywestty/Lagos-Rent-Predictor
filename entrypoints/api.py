@@ -39,7 +39,7 @@ async def _lifespan(_app):
     yield
 
 
-app = FastAPI(title="Lagos House Hunter AI", lifespan=_lifespan)
+app = FastAPI(title="Adugbo AI", lifespan=_lifespan)
 install_http_middleware(app)
 
 # Optional: only needed when a browser on another origin calls this API directly (for example
@@ -124,7 +124,7 @@ def _enrich_with_contract(legacy: dict, entities, request_id: str, latency_ms: f
 
 MAX_QUESTION_CHARS = 400
 OUT_OF_SCOPE_MESSAGE = (
-    "I can only help with renting in Lagos: prices by area and size, budgets, comparing areas, "
+    "I'm Adugbo AI, and I can only help with renting in Lagos: prices by area and size, budgets, comparing areas, "
     "and practical renting advice. Try something like \"2 bedroom rent in Yaba\"."
 )
 # Obvious attempts to override the assistant. Caught before any AI call, so they cost nothing.
