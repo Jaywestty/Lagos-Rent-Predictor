@@ -12,7 +12,7 @@ export function MoveIn() {
   const areas = useQuery({ queryKey: ["areas"], queryFn: getAreas, staleTime: 5 * 60_000 });
   const fromArea = areas.data?.find((a) => a.area === area)?.median_ngn ?? null;
 
-  useEffect(() => { document.title = "Move-in cost · Lagos Rent"; }, []);
+  useEffect(() => { document.title = "Move-in cost · Adugbo AI"; }, []);
 
   return (
     <div className="mx-auto w-full max-w-[1080px] px-4 pb-12 pt-6 md:px-10 md:pt-10">
