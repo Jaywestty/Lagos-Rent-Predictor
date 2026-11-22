@@ -1,8 +1,8 @@
-# Lagos Rent
+# Adugbo AI
 
 **Know what rent in Lagos really costs, before you start calling agents.**
 
-Lagos Rent is a web app that answers rent questions, such as *"How much is a 2 bedroom in Yaba?"*, using real property listings collected every week. It shows the typical rent, the price range, how many listings the answer is based on, and the listings themselves.
+*Àdúgbò* is Yoruba for neighbourhood. Adugbo AI is a web app that answers rent questions, such as *"How much is a 2 bedroom in Yaba?"*, using real property listings collected every week. It shows the typical rent, the price range, how many listings the answer is based on, and the listings themselves.
 
 ---
 
@@ -16,9 +16,9 @@ Finding a place to rent in Lagos is hard to do well:
 - **Areas are hard to judge from a distance.** Traffic, flooding, power supply and safety matter as much as price, and that information is scattered across the web.
 - **Old figures mislead.** Rent moves quickly. Blog posts and word-of-mouth prices go out of date.
 
-## What Lagos Rent does about it
+## What Adugbo AI does about it
 
-| You want to know | Lagos Rent gives you |
+| You want to know | Adugbo AI gives you |
 | --- | --- |
 | "How much is a 2 bedroom in Yaba?" | The **typical rent** and the **range most listings fall in**, worked out from listings posted in the last few weeks, plus the listings themselves. |
 | "Is this answer reliable?" | Every answer says **how many listings it is based on** and how recent they are, with a plain confidence label. When there is too little data, it says so instead of guessing. |
@@ -33,11 +33,12 @@ Finding a place to rent in Lagos is hard to do well:
 - **Every price comes from a real listing.** The AI only reads your question; it never invents prices. Rent figures are calculated from stored listings, and each answer links back to them.
 - **Honest about uncertainty.** Answers show how many listings they rest on, and flag listings whose price looks mistyped.
 - **Fresh data.** Listings are collected weekly, and only those posted in the last 7 days are added.
+- **Stays on topic, and safe.** Adugbo AI only answers questions about renting in Lagos. Anything else, and any attempt to change its instructions, gets a polite refusal before an AI or web search is even called. Text from the web is treated as data, never as instructions, prices in web text are removed, and links in answers can only point at the cited sources.
 - **Private by default.** No accounts, no IP addresses, no personal data. History and saved items are tied to a random ID kept in your browser.
 
 ### Why there is no sign-up
 
-Lagos Rent has **no user registration, on purpose**. Checking what rent costs should take seconds, not a form, an email confirmation and a password. Asking for nothing also means there is no personal data to protect, leak or sell.
+Adugbo AI has **no user registration, on purpose**. Checking what rent costs should take seconds, not a form, an email confirmation and a password. Asking for nothing also means there is no personal data to protect, leak or sell.
 
 What this means in practice:
 
@@ -46,6 +47,10 @@ What this means in practice:
 - The only accounts in the system are for the site's administrators, created from the command line.
 
 ---
+
+## Meet Adugbo
+
+The mascot, Adugbo, is a friendly house-headed robot with a map pin on its roof. It waves on the welcome screen in front of the Lagos skyline and the Lekki–Ikoyi link bridge, thinks while an answer loads, and appears in the logo and favicon. It is drawn in SVG with CSS animation, so it stays sharp at any size, weighs a few kilobytes, and stands still for anyone who prefers reduced motion.
 
 ## Using the app
 
