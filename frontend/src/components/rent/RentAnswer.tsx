@@ -97,6 +97,16 @@ export function RentAnswer({ answer, question, onAsk }: { answer: ChatAnswer; qu
             <div className="fade-in absolute top-[2px] h-[20px] w-[3px] rounded" style={{ left: `calc(${markerPct}% - 1.5px)`, background: "var(--text)", boxShadow: "0 0 0 2px var(--surface)", animationDelay: "400ms" }} />
           </div>
         )}
+        {answer.budget && (
+          <div className="rounded-xl px-4 py-3 text-[14px] leading-relaxed" style={{ background: answer.budget.within_count ? "var(--soft)" : "var(--sand)" }}>
+            <p>
+              Your budget: <strong className="figure">{nairaShort(answer.budget.amount)}</strong> {answer.budget.period === "month" ? `a month (${nairaShort(answer.budget.yearly)} a year)` : "a year"}.{" "}
+              {answer.budget.within_count > 0
+                ? <><strong>{answer.budget.within_count} listing{answer.budget.within_count === 1 ? "" : "s"}</strong> at or under it{answer.budget.areas.length ? `, mostly in ${answer.budget.areas.slice(0, 3).map((a) => a.area).join(", ")}` : ""}.</>
+                : <>No listings fit it yet{answer.budget.stretch_count ? `; ${answer.budget.stretch_count} are within 15% above it` : ""}.</>}
+            </p>
+          </div>
+        )}
         <p className="muted text-[13px]">
           From {answer.listing_count} listing{answer.listing_count === 1 ? "" : "s"}{freshness ? `, newest ${freshness}` : ""}. Monthly prices are converted to yearly.
         </p>
