@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { timeAgo } from "../../lib/format";
 import { useSiteStats } from "../../lib/useSiteStats";
+import { MascotHead } from "../brand/Mascot";
 
 const LINKS = [
   { to: "/", label: "Ask", end: true },
@@ -14,14 +15,11 @@ const LINKS = [
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <span className="flex items-center gap-2.5">
-      <span aria-hidden className="relative grid h-9 w-9 place-items-center overflow-hidden rounded-[10px] text-[13px] font-bold text-white" style={{ background: "var(--action)" }}>
-        <span className="absolute inset-x-0 bottom-0 h-[38%]" style={{ background: "var(--forest)" }} />
-        <span className="relative font-display">LR</span>
-      </span>
+      <span aria-hidden className="grid h-10 w-10 place-items-center"><MascotHead size={40} /></span>
       {!compact && (
         <span className="flex flex-col leading-none">
-          <span className="font-display text-[17px] font-bold">Lagos Rent</span>
-          <span className="muted mt-0.5 hidden text-[11px] font-medium sm:block">Real prices from real listings</span>
+          <span className="font-display text-[18px] font-bold">Adugbo <span style={{ color: "var(--action)" }}>AI</span></span>
+          <span className="muted mt-0.5 hidden text-[11px] font-medium sm:block">Lagos rent, from real listings</span>
         </span>
       )}
     </span>
@@ -63,7 +61,7 @@ export function Header({ theme, onToggle }: { theme: string; onToggle: () => voi
   return (
     <header className="sticky top-0 z-20 border-b backdrop-blur" style={{ background: "color-mix(in srgb, var(--surface) 90%, transparent)", borderColor: "var(--border)" }}>
       <div className="mx-auto flex h-[64px] max-w-[1200px] items-center justify-between gap-3 px-4 md:px-8">
-        <NavLink to="/" aria-label="Lagos Rent home"><Logo /></NavLink>
+        <NavLink to="/" aria-label="Adugbo AI home"><Logo /></NavLink>
         <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">
           {LINKS.map((l) => (
             <NavLink key={l.to} to={l.to} end={l.end} className={linkClass} style={({ isActive }) => (isActive ? { background: "var(--soft)", color: "var(--action)" } : undefined)}>{l.label}</NavLink>
