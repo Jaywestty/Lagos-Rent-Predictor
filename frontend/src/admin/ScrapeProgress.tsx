@@ -125,7 +125,7 @@ export function ScrapeProgress({ run, onStop }: { run: Run; onStop?: (id: number
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <p className="muted text-[13px] tabular">Running for {duration(elapsed)}{beat != null ? ` · last update ${duration(beat * 1000)} ago` : ""}</p>
-          {p && onStop && !stopping && !confirmStop && (
+          {onStop && !stopping && !confirmStop && (
             <button type="button" className="btn-ghost" style={{ borderColor: "var(--danger)", color: "var(--danger)" }} onClick={() => setConfirmStop(true)}>Stop scrape</button>
           )}
         </div>
@@ -192,7 +192,7 @@ export function ScrapeProgress({ run, onStop }: { run: Run; onStop?: (id: number
             <Count label="New listings saved" value={added} tone="var(--good)" />
             <Count label="Updated" value={updated} />
           </div>
-          <p className="muted text-[12px]">{run.log_excerpt || "Waiting for the first page to finish."} This run started before the backend had live progress and the Stop button, so it shows saved counts only. To stop it, restart the backend; everything saved stays saved.</p>
+          <p className="muted text-[12px]">{run.log_excerpt || "Waiting for the first page to finish."} This run does not report step-by-step progress, so only saved counts are shown.</p>
         </div>
       )}
     </section>
