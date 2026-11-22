@@ -93,3 +93,24 @@ def test_price_question_without_extracted_area_still_uses_listings():
     with patch("scraping.location_normalizer.KNOWN_AREAS", ["Lekki", "Yaba"]):
         routed = _route_price_questions_to_listings("What is the typical rent in Lekki according to market data?", ents)
     assert routed.query_type == QueryType.LOOKUP and routed.area == "Lekki"
+
+
+def test_ai_text_never_says_median():
+    from advice.advice_engine import plain_words
+
+    out = plain_words("Use the median figure. Medians vary. Median rent is high. Intermediate floors.")
+    assert "median" not in out.lower()
+    assert out == "Use the typical figure. Typical figures vary. Typical rent is high. Intermediate floors."
+
+
+def test_no_data_help_suggests_spelling_fix_and_covered_areas():
+    from entrypoints.api import _no_data_help
+
+    areas = [{"area": "Yaba", "listing_count": 72}, {"area": "Lekki", "listing_count": 300}]
+    with patch("query.market.list_areas", return_value=areas):
+        typo = _no_data_help(PropertyEntities(query_type=QueryType.LOOKUP, area="Yabba"))
+        covered = _no_data_help(PropertyEntities(query_type=QueryType.LOOKUP, area="yaba", beds=5))
+        missing = _no_data_help(PropertyEntities(query_type=QueryType.LOOKUP, area="Badagry"))
+    assert typo["did_you_mean"] == "Yaba" and not typo["covered"]
+    assert covered["covered"] and covered["area_listings"] == 72 and covered["area"] == "Yaba"
+    assert missing["did_you_mean"] is None and not missing["covered"] and missing["suggestions"] == ["Yaba", "Lekki"]
