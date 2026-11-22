@@ -1,7 +1,12 @@
+import { Mascot } from "../brand/Mascot";
+
 export function LoadingState({ text = "Checking listings..." }: { text?: string }) {
   return (
     <div className="card fade-in p-4 md:p-6" aria-label="Loading" role="status">
-      <p key={text} className="fade-in text-[14px] font-semibold">{text}</p>
+      <div className="flex items-center gap-3">
+        <Mascot size={48} mood="think" />
+        <p key={text} className="fade-in text-[14px] font-semibold">{text}</p>
+      </div>
       <div className="skeleton mt-4 h-10 w-1/2" />
       <div className="skeleton mt-3 h-4" />
       <div className="skeleton mt-2 h-4 w-5/6" />
