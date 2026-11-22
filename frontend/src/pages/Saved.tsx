@@ -13,7 +13,7 @@ export function Saved() {
   const delSaved = useMutation({ mutationFn: deleteSaved, onSuccess: () => qc.invalidateQueries({ queryKey: ["saved"] }) });
   const delFav = useMutation({ mutationFn: deleteFavorite, onSuccess: () => qc.invalidateQueries({ queryKey: ["favorites"] }) });
 
-  useEffect(() => { document.title = "Saved · Lagos Rent"; }, []);
+  useEffect(() => { document.title = "Saved · Adugbo AI"; }, []);
 
   return (
     <div className="mx-auto w-full max-w-[1080px] px-4 pb-12 pt-6 md:px-10 md:pt-10">
