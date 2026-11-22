@@ -1,8 +1,8 @@
-# Render Blueprint for the Lagos Rent API (FastAPI).
+# Render Blueprint for the Adugbo AI API (FastAPI).
 # New > Blueprint in the Render dashboard, pick this repository, then fill in the secret values.
 services:
   - type: web
-    name: lagos-rent-api
+    name: adugbo-ai-api
     runtime: python
     plan: free
     region: frankfurt # close to the Supabase eu-central-1 database
