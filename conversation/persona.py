@@ -55,7 +55,31 @@ _FILLER = {
     "wetin", "happen", "una", "ni", "e", "o", "oh", "there", "wale", "adugbo", "ai", "bot", "sir", "ma",
     "boss", "my", "guy", "friend", "everyone", "all", "man", "today", "alaikum", "alaykum", "nice", "to",
     "meet", "im", "i", "am", "and", "day", "the", "dear", "bro", "sis", "fam", "oga",
+    "fine", "well", "new", "here", "back", "great",
 }
+
+# "hello I am Juwon", "hi, my name is Tolu", "how far, na Emeka be my name".
+_INTRO = re.compile(r"(?:^|\s)(?:i am|im|i be|my name is|my names|this is|call me|na me be)\s+([a-z]{2,20})"
+                    r"(?:\s+(?:here|o|oh|be my name))?$")
+_INTRO_PIDGIN = re.compile(r"(?:^|\s)na\s+([a-z]{2,20})\s+be my name$")
+# Words that follow "I am" without being a name ("I am fine", "I'm looking for...").
+_NOT_A_NAME = {
+    "fine", "good", "ok", "okay", "well", "new", "here", "back", "looking", "searching", "interested", "moving",
+    "relocating", "tired", "happy", "great", "a", "an", "the", "not", "just", "from", "in", "at", "so", "very",
+    "really", "also", "still", "trying", "wale", "adugbo", "there", "alright", "cool", "doing", "sure", "ready",
+    "glad", "excited", "done", "sorry", "confused", "lost", "broke", "student", "renting", "house", "hunting",
+    "single", "married", "planning", "going", "coming", "asking", "wondering", "you", "u", "dey", "fit", "wan",
+}
+
+
+def _split_intro(words: list[str]) -> tuple[list[str], str | None]:
+    """Take a self-introduction off the end of a greeting: (remaining words, name or None)."""
+    joined = " ".join(words)
+    match = _INTRO.search(joined) or _INTRO_PIDGIN.search(joined)
+    if not match or match.group(1) in _NOT_A_NAME:
+        return words, None
+    rest = joined[: match.start()].split()
+    return rest, match.group(1).capitalize()
 _THANKS = {"thanks", "thank", "thx", "tnx", "ty", "appreciate", "appreciated", "nagode", "ese", "daalu", "you", "u",
            "so", "much", "a", "lot", "wale", "o", "oh", "jare", "well", "done", "great", "nice", "cool", "ok", "okay",
            "alright", "abeg", "e", "don", "dey", "sir", "boss", "bro", "man"}
@@ -70,6 +94,11 @@ def _words(text: str) -> list[str]:
 def is_greeting(text: str) -> bool:
     """A message that is only a greeting ("hi", "good morning Wale", "how far"), not a question with a greeting."""
     words = _words(text)
+    if not words or len(words) > 10:
+        return False
+    words, name = _split_intro(words)
+    if name and not words:
+        return True  # just "my name is Juwon"
     if not words or len(words) > 8:
         return False
     if not all(w in _CORE_GREETING or w in _FILLER for w in words):
@@ -142,8 +171,16 @@ PIDGIN_LEADS = {
 CLARIFY_AREA = {"en": "Which area are you looking for?", "pcm": "Which area you dey find house for?"}
 
 
-def greeting(language: str) -> dict:
-    g = _GREETING.get(language, _GREETING["en"])
+def introduced_name(text: str) -> str | None:
+    """The name in "hello, I am Juwon", used only to greet back. It is not stored anywhere."""
+    return _split_intro(_words(text))[1]
+
+
+def greeting(language: str, name: str | None = None) -> dict:
+    g = dict(_GREETING.get(language, _GREETING["en"]))
+    if name:
+        g["title"] = (f"How far {name}! I be {NAME}, your Adugbo AI." if language == "pcm"
+                      else f"Hello {name}, nice to meet you! I'm {NAME}, your Adugbo AI.")
     examples = _EXAMPLES.get(language, _EXAMPLES["en"])
     text = "\n".join([g["title"], g["body"], *[f"- {c}" for c in g["can"]], g["close"]])
     return {**g, "examples": examples, "text": text}
