@@ -95,21 +95,21 @@ Wale is the assistant's persona: a house-headed robot with a map pin on his roof
 ## How it works
 
 ```mermaid
-flowchart LR
+flowchart TB
+    subgraph Q [Every question: React PWA → Vercel → FastAPI]
+        direction LR
+        Guards[Rules: length,<br/>injection, greetings] --> Limits[Usage<br/>limits] --> LLM[Groq: question<br/>to typed filters]
+        LLM --> SQL[SQL over<br/>listings]
+        LLM --> Advice[Tavily + Groq,<br/>prices stripped]
+    end
+    subgraph W [Every Monday: Windows scheduled task]
+        direction LR
+        Scraper[Scrape listings<br/>from the last 7 days] --> Final[De-duplicate, quality<br/>report, price snapshots]
+    end
     DB[(Postgres on Supabase)]
-    subgraph W [Every Monday]
-        Task[Scheduled task] --> Scraper[Scraper: listings from the last 7 days]
-        Scraper -->|each page saved as it goes| DB
-        Scraper --> Final[De-duplicate, quality report, price snapshots] --> DB
-    end
-    subgraph Q [Every question, FastAPI]
-        User[React PWA] -->|/api via Vercel| Guards[Rules: length, injection, greetings]
-        Guards --> Limits[Usage limits]
-        Limits --> LLM[Groq: question to typed filters]
-        LLM --> SQL[SQL over listings]
-        LLM --> Advice[Tavily search + Groq, prices stripped]
-    end
     SQL --> DB
+    Scraper -->|each page saved as it goes| DB
+    Final --> DB
     Q -.->|traces, AI calls, errors| DB
     Admin[Private admin console] --> Q
 ```
