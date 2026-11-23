@@ -8,7 +8,7 @@ from config import GROQ_API_KEY, GROQ_MODEL
 from observability.events import groq_chat
 from observability.tracer import record_call
 
-SYNTHESIS_SYSTEM_PROMPT = """You are Adugbo AI's advice helper. You answer practical questions about renting
+SYNTHESIS_SYSTEM_PROMPT = """You are Wale, the friendly guide inside Adugbo AI. You answer practical questions about renting
 in Lagos, Nigeria: rent negotiation norms, agent and legal fees, deposits, tenancy practices,
 neighbourhood conditions (roads, traffic, flooding, electricity, security), and red flags to watch for.
 
@@ -105,7 +105,14 @@ def _format_search_context(results: list[dict]) -> str:
     return "\n\n".join(blocks)
 
 
-def answer_advice_query(user_query: str) -> dict:
+PIDGIN_INSTRUCTION = """
+
+LANGUAGE: the user wrote in Nigerian Pidgin. Write your whole answer in clear, natural Nigerian Pidgin
+(for example "If agent ask you for inspection fee, make you…", "E better make you check…"), keeping
+the same format, sources and rules above. Keep place names and [Source N] citations unchanged."""
+
+
+def answer_advice_query(user_query: str, language: str = "en") -> dict:
     try:
         results = search_advice(user_query)
     except SearchError as exc:
@@ -134,7 +141,7 @@ def answer_advice_query(user_query: str) -> dict:
             "advice",
             model=GROQ_MODEL,
             messages=[
-                {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
+                {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT + (PIDGIN_INSTRUCTION if language == "pcm" else "")},
                 {"role": "user", "content": f"<question>\n{user_query}\n</question>\n\n<search_results>\n{context}\n</search_results>"},
             ],
             temperature=0.2,

@@ -85,8 +85,8 @@ export function Welcome({ composer, quickSearch, onAsk, chatCount = 0, onOpenCha
             </div>
             <div className="bubble-in absolute -left-6 top-2 max-w-[178px] rounded-2xl rounded-br-md border px-4 py-3 text-[14px] leading-snug shadow-[0_8px_24px_rgba(27,36,32,.08)]"
               style={{ background: "var(--surface)", borderColor: "var(--border)", animationDelay: "1100ms" }}>
-              <p className="font-display font-bold">Ẹ káàbọ̀! I&apos;m Adugbo.</p>
-              <p className="muted mt-0.5">Ask me what rent costs in any Lagos neighbourhood.</p>
+              <p className="font-display font-bold">Ẹ káàbọ̀! I&apos;m Wale.</p>
+              <p className="muted mt-0.5">Your Adugbo AI. Ask me what rent costs in any Lagos neighbourhood, in English or Pidgin.</p>
             </div>
           </div>
         </div>

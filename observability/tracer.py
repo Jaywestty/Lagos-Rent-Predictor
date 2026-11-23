@@ -87,4 +87,8 @@ def trace_stage(stage: str, query_type: str | None = None):
             for service in counts_after
             if counts_after.get(service, 0) - counts_before.get(service, 0) > 0
         }
-        _save_stage_trace(trace_id, stage, query_type, duration_ms, stage_calls, success, error_text)
+        try:
+            _save_stage_trace(trace_id, stage, query_type, duration_ms, stage_calls, success, error_text)
+        except Exception as exc:
+            # Timing records are nice to have: a database blip must never fail the user's question.
+            logger.warning("Could not save trace for stage={}: {}", stage, exc)

@@ -2,7 +2,7 @@ export type RangeStat = { min: number | null; max: number | null; median: number
 export type Breakdown = { self_contain: RangeStat | null; one_bedroom: RangeStat | null; two_bedroom: RangeStat | null; three_bedroom: RangeStat | null };
 export type ChatAnswer = {
   version: number;
-  status: "success" | "low_data" | "no_data" | "clarification" | "out_of_scope" | "error";
+  status: "success" | "low_data" | "no_data" | "clarification" | "out_of_scope" | "greeting" | "error";
   location: string | null;
   area: string | null;
   property_type: string | null;
@@ -24,7 +24,11 @@ export type ChatAnswer = {
   comparison?: { options: ComparisonOptionStat[] } | null;
   budget?: BudgetInfo | null;
   no_data?: NoDataHelp | null;
+  greeting?: Greeting | null;
+  language?: "en" | "pcm";
+  lead?: string | null;
 };
+export type Greeting = { title: string; body: string; can: string[]; close: string; examples: string[] };
 export type NoDataHelp = { area: string | null; covered?: boolean; area_listings?: number; did_you_mean?: string | null; suggestions?: string[] };
 export type ComparisonOptionStat = { label: string; area: string | null; beds: number | null; property_type: string | null; median: number | null; min: number | null; max: number | null; count: number; confidence: "normal" | "limited" | "insufficient"; caveat: string | null };
 export type BudgetInfo = { amount: number; period: "year" | "month"; yearly: number; within_count: number; areas: { area: string; count: number }[]; stretch_count: number };

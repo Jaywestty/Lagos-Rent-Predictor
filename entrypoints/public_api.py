@@ -66,14 +66,18 @@ def area_listings(area: str, beds: int | None = Query(None, ge=0, le=10), limit:
 
 
 @router.get("/areas/{area}/guide")
-def area_guide(area: str, refresh: bool = False, x_client_id: str | None = Header(default=None)):
+def area_guide(area: str, x_client_id: str | None = Header(default=None)):
     from advice.area_guide import GuideUnavailable, get_guide
 
     stats = market.area_stats(area)
     name = stats["area"] or market.canonical_area(area) or area
+    # Building a guide costs web searches and an AI call, so only areas we hold listings for get one,
+    # and rebuilding is admin-only (Observability > Rebuild). Cached guides keep the cost bounded.
+    if not stats["listing_count"]:
+        return {"area": name, "stats": stats, "guide": None, "guide_error": "We don't cover this area yet."}
     record_feature("guide_view", x_client_id, area=name)
     try:
-        guide = get_guide(name, refresh=refresh)
+        guide = get_guide(name)
     except GuideUnavailable as exc:
         return {"area": name, "stats": stats, "guide": None, "guide_error": str(exc)}
     generated = guide.get("generated_at")
