@@ -7,14 +7,16 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
 
 from advice.advice_engine import answer_advice_query
 from config import REQUEST_TIMEOUT_SECONDS
+from conversation import persona
 from conversation.session import load_session_entities, save_session_entities
+from entrypoints.rate_limit import Limited, device_id, limiter, masked
 from observability.events import install_http_middleware, record_error
 from observability.tracer import start_trace, trace_stage
 from query.answer import ChatAnswer, Clarification, compute_contract
@@ -125,10 +127,7 @@ def _enrich_with_contract(legacy: dict, entities, request_id: str, latency_ms: f
 
 
 MAX_QUESTION_CHARS = 400
-OUT_OF_SCOPE_MESSAGE = (
-    "I'm Adugbo AI, and I can only help with renting in Lagos: prices by area and size, budgets, comparing areas, "
-    "and practical renting advice. Try something like \"2 bedroom rent in Yaba\"."
-)
+OUT_OF_SCOPE_MESSAGE = persona.OUT_OF_SCOPE["en"]
 # Obvious attempts to override the assistant. Caught before any AI call, so they cost nothing.
 _INJECTION = re.compile(
     r"((ignore|disregard|forget|override) (?:(?:all|any|the|your|my|of|these|those|previous|prior|above|earlier)\s+){0,4}"
@@ -139,9 +138,10 @@ _INJECTION = re.compile(
 )
 
 
-def _out_of_scope_payload(request_id: str, latency_ms: float, message: str = OUT_OF_SCOPE_MESSAGE) -> dict:
-    payload = _error_payload(message, request_id, latency_ms, "out_of_scope")
+def _out_of_scope_payload(request_id: str, latency_ms: float, language: str = "en") -> dict:
+    payload = _error_payload(persona.OUT_OF_SCOPE.get(language, OUT_OF_SCOPE_MESSAGE), request_id, latency_ms, "out_of_scope")
     payload["query_type"] = "out_of_scope"
+    payload["answer"]["language"] = language
     return payload
 
 
@@ -263,6 +263,25 @@ def _error_payload(message: str, request_id: str, latency_ms: float, status: str
     return {"message": message, "answer": ans.model_dump(mode="json")}
 
 
+def _enforce_usage_limits(http_request: Request) -> None:
+    device = device_id(http_request.headers.get("x-client-id"))
+    ip = http_request.client.host if http_request.client else None
+    try:
+        limiter.check(device, ip)
+    except Limited as exc:
+        if exc.scope.startswith("global"):
+            who = "everyone"
+        else:
+            who = masked(device if exc.scope.startswith("device") else ip)
+        logger.warning("Usage limit {} hit by {}", exc.scope, who)
+        if limiter.should_alert(exc.scope, who):
+            # Shows on the admin Observability page next to real errors.
+            used = limiter.usage()["questions_today"]
+            record_error("rate_limit", f"{exc.scope} limit reached by {who} ({used} AI questions today)",
+                         route=http_request.url.path)
+        raise HTTPException(status_code=429, detail=exc.message, headers={"Retry-After": str(exc.retry_after)}) from None
+
+
 @app.post("/query")
 def query_listings(request: QueryRequest, http_request: Request):
     t0 = time.perf_counter()
@@ -278,9 +297,17 @@ def query_listings(request: QueryRequest, http_request: Request):
     if len(question) > MAX_QUESTION_CHARS:
         return _error_payload(f"Please keep your question under {MAX_QUESTION_CHARS} characters.", request_id,
                               (time.perf_counter() - t0) * 1000, "clarification")
+    language = persona.language_of(question)
     if _INJECTION.search(question):
         logger.info("Blocked instruction-override attempt: {}", question[:120])
-        return _out_of_scope_payload(request_id, (time.perf_counter() - t0) * 1000)
+        return _out_of_scope_payload(request_id, (time.perf_counter() - t0) * 1000, language)
+    if persona.is_greeting(question) or persona.is_thanks(question):
+        # Wale says hello without an AI call, so greetings are free and never count toward limits.
+        reply = persona.greeting(language) if persona.is_greeting(question) else persona.thanks(language)
+        ans = ChatAnswer(status="greeting", request_id=request_id, message=reply["text"], greeting=reply,
+                         language=language, latency_ms=round((time.perf_counter() - t0) * 1000, 2))
+        return {"message": reply["text"], "query_type": "greeting", "answer": ans.model_dump(mode="json")}
+    _enforce_usage_limits(http_request)  # only questions that reach the AI are counted
     start_trace()
     previous_entities = load_session_entities(request.session_id) if request.session_id else None
     try:
@@ -304,7 +331,7 @@ def query_listings(request: QueryRequest, http_request: Request):
         latency_ms = (time.perf_counter() - t0) * 1000
         return _error_payload("Query text is empty.", request_id, latency_ms, "clarification")
     if entities.query_type == QueryType.OUT_OF_SCOPE:
-        return _out_of_scope_payload(request_id, (time.perf_counter() - t0) * 1000)
+        return _out_of_scope_payload(request_id, (time.perf_counter() - t0) * 1000, language)
     entities = _route_price_questions_to_listings(request.query, entities)
     query_type_value = entities.query_type.value
     try:
@@ -322,9 +349,9 @@ def query_listings(request: QueryRequest, http_request: Request):
             result = build_comparison_response(entities, comp_result)
         elif entities.query_type == QueryType.ADVICE:
             with trace_stage("advice_synthesis", query_type_value):
-                result = answer_advice_query(entities.resolved_query or request.query)
+                result = answer_advice_query(entities.resolved_query or request.query, language=language)
             if isinstance(result, dict) and result.get("query_type") == "out_of_scope":
-                return _out_of_scope_payload(request_id, (time.perf_counter() - t0) * 1000)
+                return _out_of_scope_payload(request_id, (time.perf_counter() - t0) * 1000, language)
         else:
             latency_ms = (time.perf_counter() - t0) * 1000
             return _error_payload(f"Query type '{entities.query_type.value}' is not supported.", request_id, latency_ms, "out_of_scope")
@@ -350,6 +377,12 @@ def query_listings(request: QueryRequest, http_request: Request):
         ).model_dump(mode="json")
     else:
         payload = _enrich_with_contract(result, entities, request_id, latency_ms)
+    payload["answer"]["language"] = language
+    if language == "pcm" and entities.query_type != QueryType.ADVICE:
+        # Figures stay as they are; Wale adds one Pidgin line above them.
+        payload["answer"]["lead"] = persona.pidgin_lead(payload["answer"])
+        if payload["answer"].get("clarification"):
+            payload["answer"]["clarification"]["question"] = persona.CLARIFY_AREA["pcm"]
     try:
         from analytics_logging import log_question
 
@@ -403,6 +436,9 @@ async def api_chat_stream(request: QueryRequest, http_request: Request):
             result = await asyncio.wait_for(_run_chat_async(request, http_request), timeout=REQUEST_TIMEOUT_SECONDS)
         except TimeoutError:
             yield f"event: error\ndata: {json.dumps({'type': 'error', 'request_id': rid, 'message': 'Request timed out.'})}\n\n"
+            return
+        except HTTPException as exc:
+            yield f"event: error\ndata: {json.dumps({'type': 'error', 'request_id': rid, 'status': exc.status_code, 'message': exc.detail})}\n\n"
             return
         yield f"event: delta\ndata: {json.dumps({'type': 'delta', 'request_id': rid, 'text': 'Checking live listings...'})}\n\n"
         yield f"event: final\ndata: {json.dumps({'type': 'final', 'request_id': rid, 'result': result})}\n\n"
