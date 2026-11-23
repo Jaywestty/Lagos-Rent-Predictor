@@ -35,6 +35,8 @@ Finding a place to rent in Lagos is hard to do well:
 - **Honest about uncertainty.** Answers show how many listings they rest on, and flag listings whose price looks mistyped.
 - **Fresh data.** Listings are collected weekly, and only those posted in the last 7 days are added.
 - **Stays on topic, and safe.** Adugbo AI only answers questions about renting in Lagos. Anything else, and any attempt to change its instructions, gets a polite refusal before an AI or web search is even called. Text from the web is treated as data, never as instructions, prices in web text are removed, and links in answers can only point at the cited sources.
+- **Speaks your language.** Say hello and Wale introduces himself. Ask in Nigerian Pidgin ("How much be 2 bedroom for Yaba?") and he replies in Pidgin, while the rent figures stay exactly the same.
+- **Fair use for everyone.** Each device and network can ask a set number of questions a minute and a day, and the whole app has a daily ceiling, so one person or script can't use up the service for everyone. Greetings, area guides, Compare and Move-in cost don't count.
 - **Private by default.** No accounts, no IP addresses, no personal data. History and saved items are tied to a random ID kept in your browser.
 
 ### Why there is no sign-up
@@ -49,9 +51,13 @@ What this means in practice:
 
 ---
 
-## Meet Adugbo
+## Meet Wale
 
-The mascot, Adugbo, is a friendly house-headed robot with a map pin on its roof. It waves on the welcome screen in front of the Lagos skyline and the Lekki–Ikoyi link bridge, thinks while an answer loads, and appears in the logo and favicon. It is drawn in SVG with CSS animation, so it stays sharp at any size, weighs a few kilobytes, and stands still for anyone who prefers reduced motion.
+Wale is the voice of Adugbo AI. Say "hi", "good morning" or "how far" and he answers: "I'm Wale, your Adugbo AI", followed by what he can do and a few questions to tap. Greetings are handled by simple rules, not the AI, so they are instant and free.
+
+If you write in Nigerian Pidgin, Wale answers in Pidgin: renting advice is written in Pidgin, and listing answers get a short Pidgin line above the same figures. Pidgin is detected from words like "wetin", "dey", "abeg" and "how far".
+
+He appears as a friendly house-headed robot with a map pin on its roof. It waves on the welcome screen in front of the Lagos skyline and the Lekki–Ikoyi link bridge, thinks while an answer loads, and appears in the logo and favicon. It is drawn in SVG with CSS animation, so it stays sharp at any size, weighs a few kilobytes, and stands still for anyone who prefers reduced motion.
 
 ## Using the app
 
@@ -146,6 +152,10 @@ npm run dev --prefix frontend                     # web app on http://localhost:
 | `TAVILY_API_KEY` | Yes | Web search for area guides and general advice |
 | `GROQ_MODEL` | No | Defaults to `openai/gpt-oss-120b` |
 | `ALLOWED_ORIGINS` | No | Comma-separated origins allowed to call the API directly (CORS). Not needed with the Vercel proxy setup. |
+| `LIMIT_DEVICE_PER_MINUTE`, `LIMIT_DEVICE_PER_DAY` | No | Questions per device (defaults 8 a minute, 100 a day) |
+| `LIMIT_IP_PER_MINUTE`, `LIMIT_IP_PER_DAY` | No | Questions per network address (defaults 20 a minute, 400 a day; looser because mobile networks share addresses) |
+| `LIMIT_GLOBAL_PER_DAY` | No | Questions the whole app answers per day before pausing until midnight Lagos time (default 3000) |
+| `FRONTEND_URL` | No | Shown as a link when someone opens the API address directly |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | No | Used once by `create-admin` |
 | `API_PROXY_TARGET` | No | Frontend dev only: where Vite proxies `/api` (default `http://localhost:8000`) |
 
