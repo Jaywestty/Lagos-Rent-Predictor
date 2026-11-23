@@ -97,3 +97,31 @@ def test_advice_is_asked_for_in_pidgin():
          patch("entrypoints.api.limiter"):
         TestClient(app).post("/api/chat", json={"query": "abeg wetin I suppose check before I pay agent?"})
     assert advice.call_args.kwargs["language"] == "pcm"
+
+
+@pytest.mark.parametrize("text,name", [
+    ("hello i am juwon", "Juwon"), ("Hi, I'm Tolu", "Tolu"), ("hey my name is Ada", "Ada"),
+    ("good morning, this is Emeka", "Emeka"), ("how far, na Bayo be my name", "Bayo"),
+    ("howfar i be Segun", "Segun"), ("my name is Kemi", "Kemi"),
+])
+def test_greeting_with_a_name_is_greeted_back_by_name(text, name):
+    assert persona.is_greeting(text)
+    assert persona.introduced_name(text) == name
+
+
+@pytest.mark.parametrize("text", ["hi i am fine", "hello I'm new here", "hi i am looking for a 2 bedroom in Yaba",
+                                  "I am moving to Lekki"])
+def test_i_am_plus_a_word_is_not_always_a_name(text):
+    assert persona.introduced_name(text) is None
+
+
+def test_hello_i_am_juwon_gets_a_personal_reply():
+    answer, extract, _ = _ask("hello i am juwon")
+    assert answer["status"] == "greeting"
+    assert answer["greeting"]["title"] == "Hello Juwon, nice to meet you! I'm Wale, your Adugbo AI."
+    extract.assert_not_called()
+
+
+def test_pidgin_intro_gets_pidgin_reply_by_name():
+    answer, _, _ = _ask("howfar, i be Segun")
+    assert answer["greeting"]["title"] == "How far Segun! I be Wale, your Adugbo AI."
