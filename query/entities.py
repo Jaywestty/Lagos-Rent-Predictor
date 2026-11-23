@@ -23,6 +23,10 @@ GENERIC_PROPERTY_TYPE_TERMS = {
 
 SYSTEM_PROMPT = """You extract structured search intent from natural language queries about renting or buying property in Lagos, Nigeria.
 
+Queries may be written in English or Nigerian Pidgin. Extract Pidgin exactly as you would English:
+"how much be 2 bedroom for Yaba" is a lookup (beds 2, area Yaba); "wetin 2m fit get me for Ikeja" is
+affordability; "abeg wetin I suppose check before I pay agent" is advice. Write resolved_query in English.
+
 You may be given the entities extracted from the user's PREVIOUS query in this conversation, as
 context. If provided, treat the new query as a possible follow-up: any field the new query does
 NOT mention should carry over unchanged from the previous entities. Only override a field when
