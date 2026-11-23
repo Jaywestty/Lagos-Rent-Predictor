@@ -1,131 +1,166 @@
+<div align="center">
+
 # Adugbo AI
 
-**Know what rent in Lagos really costs, before you start calling agents.**
+**Know what rent in Lagos really costs, before you call an agent.**
 
-*Àdúgbò* is Yoruba for neighbourhood. Adugbo AI is a web app that answers rent questions, such as *"How much is a 2 bedroom in Yaba?"*, using real property listings collected every week. It shows the typical rent, the price range, how many listings the answer is based on, and the listings themselves.
+Ask in plain English or Nigerian Pidgin. Get the typical yearly rent, the range, and the real listings behind every number.
+
+[**Try it live → adugbo-ai.vercel.app**](https://adugbo-ai.vercel.app)
+
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React_19-20232A?logo=react&logoColor=61DAFB)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/Supabase_Postgres-3FCF8E?logo=supabase&logoColor=white)
+![Groq](https://img.shields.io/badge/LLM-Groq-F55036)
+![PWA](https://img.shields.io/badge/Installable-PWA-5A0FC8?logo=pwa&logoColor=white)
+
+<img src=".github/readme/home.png" alt="Adugbo AI home page: the headline 'Know what rent really costs before you call an agent', a question box, example questions, Wale the mascot waving, and a strip of areas with their typical rent" width="900" />
+
+</div>
+
+*Àdúgbò* is Yoruba for "neighbourhood". Adugbo AI collects rent listings from Nigerian property sites every week. It answers questions like *"How much is a 2 bedroom in Yaba?"* with figures calculated from those listings, never from an AI's guess.
+
+---
+
+## Contents
+
+- [The problem](#the-problem)
+- [What you get](#what-you-get)
+- [Meet Wale](#meet-wale)
+- [Honest by design](#honest-by-design)
+- [How it works](#how-it-works)
+- [Engineering decisions](#engineering-decisions)
+- [Tech stack](#tech-stack)
+- [Run it locally](#run-it-locally)
+- [Deployment](#deployment)
+- [Testing and quality](#testing-and-quality)
+- [Reference](#reference)
+- [Limitations and what's next](#limitations-and-whats-next)
 
 ---
 
 ## The problem
 
-Finding a place to rent in Lagos is hard to do well:
+Renting in Lagos is hard to do well:
 
-- **Prices are scattered and unclear.** Listings are spread across many websites and agents. There is no single, trustworthy answer to "what should a 2 bedroom in Gbagada cost this year?"
-- **Asking prices vary wildly.** The same kind of flat can be listed at very different prices. Without a sense of the normal range, it is hard to know when a price is fair, high or suspicious.
-- **The first payment is much more than the rent.** Agency, legal and caution fees, often with one or two years paid upfront, can make the cash needed to move in far higher than the yearly rent.
-- **Areas are hard to judge from a distance.** Traffic, flooding, power supply and safety matter as much as price, and that information is scattered across the web.
-- **Old figures mislead.** Rent moves quickly. Blog posts and word-of-mouth prices go out of date.
+- **There is no reference price.** Listings are spread across sites and agents, and the same kind of flat can be advertised at wildly different prices. Without a sense of the normal range, you can't tell a fair price from an inflated one.
+- **Prices go stale fast.** Rent moves quickly, so last year's blog post or a friend's quote is often wrong.
+- **The rent is not the bill.** Agency, legal and caution fees, often on top of one or two years paid upfront, can push the cash needed to move in far above the yearly rent.
+- **Areas are hard to judge from a distance.** Flooding, traffic, power and safety matter as much as price, and that information is scattered across the web.
 
-## What Adugbo AI does about it
+## What you get
 
-| You want to know | Adugbo AI gives you |
-| --- | --- |
-| "How much is a 2 bedroom in Yaba?" | The **typical rent** and the **range most listings fall in**, worked out from listings posted in the last few weeks, plus the listings themselves. |
-| "Is this answer reliable?" | Every answer says **how many listings it is based on** and how recent they are, with a plain confidence label. When there is too little data, it says so instead of guessing. |
-| "What will I actually pay to move in?" | A **move-in cost calculator**: rent plus agency, legal and caution fees, service charge and moving costs, all editable. |
-| "What is it like to live there?" | **Area guides** covering commute, flooding, electricity, safety and amenities, summarised from web sources that are linked so you can check them. |
-| "Yaba or Surulere?" | **Side-by-side comparison** of up to three areas for the size you need. |
-| "Are prices going up?" | **Weekly price trends** per area and size. |
-| "Where was I?" | **Chat history**, **saved searches** and **favourite listings**, kept on your device with no sign-up. |
+<img src=".github/readme/answer.png" alt="An answer for '2 bedroom in Yaba': typical rent ₦3.5M a year, listings range from ₦3M to ₦6.5M, a 'Limited data · 7 listings' label, buttons for the area guide, move-in cost, compare and save, and the 7 listings behind the answer, each marked below, at or above typical" width="900" />
 
-### Principles
+Every answer shows:
 
-- **Every price comes from a real listing.** The AI only reads your question; it never invents prices. Rent figures are calculated from stored listings, and each answer links back to them.
-- **Plain words.** Answers say "typical rent" and "range", never statistics jargon.
-- **Honest about uncertainty.** Answers show how many listings they rest on, and flag listings whose price looks mistyped.
-- **Fresh data.** Listings are collected weekly, and only those posted in the last 7 days are added.
-- **Stays on topic, and safe.** Adugbo AI only answers questions about renting in Lagos. Anything else, and any attempt to change its instructions, gets a polite refusal before an AI or web search is even called. Text from the web is treated as data, never as instructions, prices in web text are removed, and links in answers can only point at the cited sources.
-- **Speaks your language.** Say hello and Wale introduces himself. Ask in Nigerian Pidgin ("How much be 2 bedroom for Yaba?") and he replies in Pidgin, while the rent figures stay exactly the same.
-- **Fair use for everyone.** Each device and network can ask a set number of questions a minute and a day, and the whole app has a daily ceiling, so one person or script can't use up the service for everyone. Greetings, area guides, Compare and Move-in cost don't count.
-- **Private by default.** No accounts, no IP addresses, no personal data. History and saved items are tied to a random ID kept in your browser.
+- the **typical yearly rent**
+- the **range** most listings fall in
+- **how many listings** it rests on, with a plain confidence label (*Solid data*, *Limited data*, *Very little data*)
+- **the listings themselves**, each marked as below, at or above typical, and each linking to its source
 
-### Why there is no sign-up
+Monthly prices are converted to yearly, and listings whose price looks mistyped are flagged.
 
-Adugbo AI has **no user registration, on purpose**. Checking what rent costs should take seconds, not a form, an email confirmation and a password. Asking for nothing also means there is no personal data to protect, leak or sell.
+| Compare areas side by side | Area guides | Total move-in cost |
+| :---: | :---: | :---: |
+| <img src=".github/readme/compare.png" alt="Compare page: Yaba ₦3.5M, Surulere ₦5.5M and Ajah ₦3.3M typical rent for a 2 bedroom, with price range bars and listing counts" width="300" /> | <img src=".github/readme/area-guide.png" alt="Yaba area guide: typical rent by size from listings, plus a 'Living in Yaba' section summarised from cited web sources" width="300" /> | <img src=".github/readme/move-in.png" alt="Move-in cost calculator: Yaba's typical rent plus agency, legal and caution fees and moving costs, totalling ₦3.1M" width="300" /> |
+| Up to three areas for the size you need. The cheapest is named, and each area shows its own data confidence. | Rent by size from listings, plus commute, flooding, power and safety, summarised from linked web sources. | Rent plus agency, legal and caution fees, upfront years and moving costs. Every figure is editable. |
 
-What this means in practice:
-
-- You can use every feature straight away: asking, area guides, comparisons, the move-in calculator, chat history, saved searches and favourites.
-- Your chats and saved items are linked to a random ID stored in your browser. They stay on that browser; they do not follow you to another phone or laptop, and clearing your browser data removes the link to them.
-- The only accounts in the system are for the site's administrators, created from the command line.
-
----
+You also get chat history, saved searches and favourite listings, all without an account. The app installs to your phone or desktop as a PWA and keeps working offline for pages you've already opened.
 
 ## Meet Wale
 
-Wale is the voice of Adugbo AI. Say "hi", "good morning" or "how far" and he answers: "I'm Wale, your Adugbo AI", followed by what he can do and a few questions to tap. Greetings are handled by simple rules, not the AI, so they are instant and free.
+<img src=".github/readme/wale-pidgin-mobile.png" alt="Three phone screens: Wale replying 'Hello Juwon, nice to meet you! I'm Wale, your Adugbo AI' with what he can do; a Pidgin question 'How much be 2 bedroom for Yaba?' answered with 'See wetin rent dey cost, from real listings wey we gather:' above the same ₦3.5M card; and the home page in dark mode" width="900" />
 
-If you write in Nigerian Pidgin, Wale answers in Pidgin: renting advice is written in Pidgin, and listing answers get a short Pidgin line above the same figures. Pidgin is detected from words like "wetin", "dey", "abeg" and "how far".
+Wale is the assistant's persona: a house-headed robot with a map pin on his roof, drawn in SVG.
 
-He appears as a friendly house-headed robot with a map pin on its roof. It waves on the welcome screen in front of the Lagos skyline and the Lekki–Ikoyi link bridge, thinks while an answer loads, and appears in the logo and favicon. It is drawn in SVG with CSS animation, so it stays sharp at any size, weighs a few kilobytes, and stands still for anyone who prefers reduced motion.
+- **He greets you back.** "Hi", "good morning", "how far" or "bawo ni" get an introduction, what he can do, and questions to tap. If you introduce yourself ("hello, I am Juwon"), he uses your name.
+- **He speaks Pidgin.** Ask *"How much be 2 bedroom for Yaba?"* and advice is written in Pidgin, while listing answers get a Pidgin line above the same figures. He recognises the usual spellings (*howfar*, *watin*, *how bodi*).
+- **Greetings cost nothing.** They are matched by rules before any AI call, so they are instant, free, and never count toward usage limits. The name you give is used for that one reply and is not stored.
 
-## Using the app
+## Honest by design
 
-1. **Ask** a question in plain words, or tap an area, a size and a budget.
-2. **Read the answer:** the typical rent, the range, a breakdown by size, and the listings behind it.
-3. **Follow up** in the same chat ("what about a 3 bedroom?"). The app remembers what you were asking about.
-4. **Open your chats** any time from *Your chats*, start a *New chat*, or delete old ones.
-5. **Explore** *Area guides*, *Compare*, *Move-in cost* and *Saved* from the top menu.
+<img src=".github/readme/guardrails-mobile.png" alt="Two phone screens: 'We don't cover Badagry yet', explaining why and offering to ask what living there is like or to try covered areas; and an off-topic request for a football poem politely declined with examples of rent questions" width="600" />
 
-### When an area isn't covered yet
-
-Adugbo AI never guesses a price. If there are no recent listings for what you asked, it says why and offers the next step:
-
-| You asked | What you see |
-| --- | --- |
-| A misspelt area, like "self contain in **Yabba**" | "Did you mean **Yaba**?" with a one-tap button that reruns your question for Yaba |
-| A covered area but an uncommon size, like "5 bedroom flat in Yaba" | "We have 24 recent listings in Yaba, just none of that size", with a button to see all of Yaba |
-| An area with no listings yet, like "2 bedroom in **Badagry**" | "We don't cover Badagry yet", why (new listings arrive weekly, mostly from the busiest areas), a button to ask what living in Badagry is like, and the busiest covered areas to try instead |
-
-### Install it as an app
-
-Adugbo AI is a web app you can install. It then opens full screen from your home screen or desktop like any other app, starts quickly, and the pages you opened still load without a connection (new answers need one).
-
-- **Android (Chrome):** tap **Install app** in the menu, or Chrome's *Install app* / *Add to Home screen* prompt.
-- **iPhone or iPad (Safari):** tap **Share**, then **Add to Home Screen**. The app's *Install app* button shows these steps.
-- **Computer (Chrome or Edge):** click **Install app** in the header, or the install icon in the address bar.
+- **The AI never produces a number.** It only turns the question into structured filters. Every price comes from SQL over stored listings, and any figures in web text used for advice are stripped out before you see them.
+- **No data, no guess.** A misspelt area gets *"Did you mean Yaba?"*. A covered area with no listings of that size says so. An area with no listings at all (*Badagry*) is named as not covered yet, with useful next steps.
+- **It stays on topic.** Questions that aren't about renting in Lagos, and obvious attempts to override its instructions, are declined before any AI or search call is made. Web content is treated as data, never as instructions, and links in answers can only point to the cited sources.
+- **Fair use for everyone.** Usage limits apply per device, per network and for the whole app, so one script can't use up the AI budget for everyone else.
+- **No sign-up, on purpose.** Checking a price should take seconds, not a form. History and saved items are tied to a random ID in your browser. There are no accounts and no personal data, so there's nothing to leak.
 
 ---
 
-## For developers
-
-### How it works
+## How it works
 
 ```mermaid
 flowchart LR
-    Task[Weekly scheduled task] --> Scraper[Scraper: last 7 days]
-    Scraper -->|each page saved as it goes| DB[(PostgreSQL / Supabase)]
-    Scraper --> Final[Final pass: de-duplicate, quality report, price snapshots]
-    Final --> DB
-    User[Web app, React] -->|/api| API[FastAPI]
-    API --> LLM[Groq: understand the question]
-    API -->|SQL over listings| DB
-    API --> Guides[Area guides: Tavily + Groq, cached 30 days]
-    API --> History[Chat history, saved items]
-    History --> DB
-    API --> Obs[Observability events]
-    Obs --> DB
-    Admin[Admin console] --> API
+    DB[(Postgres on Supabase)]
+    subgraph W [Every Monday]
+        Task[Scheduled task] --> Scraper[Scraper: listings from the last 7 days]
+        Scraper -->|each page saved as it goes| DB
+        Scraper --> Final[De-duplicate, quality report, price snapshots] --> DB
+    end
+    subgraph Q [Every question, FastAPI]
+        User[React PWA] -->|/api via Vercel| Guards[Rules: length, injection, greetings]
+        Guards --> Limits[Usage limits]
+        Limits --> LLM[Groq: question to typed filters]
+        LLM --> SQL[SQL over listings]
+        LLM --> Advice[Tavily search + Groq, prices stripped]
+    end
+    SQL --> DB
+    Q -.->|traces, AI calls, errors| DB
+    Admin[Private admin console] --> Q
 ```
 
-1. **Collect.** A weekly task scrapes rent listings from public Nigerian property sites, newest first. It keeps listings dated within the last 7 days, respects each site's robots.txt, and skips any site that refuses access.
-2. **Store.** Each scraped page is cleaned (area names, monthly to yearly prices) and saved straight away, so a stopped run never loses work and the next run resumes. A final pass removes duplicates, writes a quality report and updates weekly price snapshots.
-3. **Answer.** The API uses an LLM only to turn the question into structured filters (area, bedrooms, budget). Prices come from SQL over stored listings and are returned as a typed answer with range method and confidence.
-4. **Remember.** Each conversation is a thread. Questions and answers are saved per device, and the thread ID doubles as the follow-up memory key.
+What happens when someone asks **"How much be 2 bedroom for Yaba?"**:
 
-### Tech stack
+1. **Rules first, at no cost.** Length check, prompt-injection patterns, greeting and thanks detection, and language detection (Pidgin here). Nothing so far has called an AI.
+2. **Usage limits.** The question is counted against the device, the network and the daily total. Over a limit, the user gets a friendly *"wait about N seconds"* reply.
+3. **Understanding.** Groq turns the question into typed entities (`lookup`, beds 2, area Yaba) using a prompt with worked examples, including Pidgin ones. Follow-ups inherit the previous question's filters.
+4. **Answering.** Lookups, budgets and comparisons run as SQL over listings and come back in a typed answer: typical rent, range method (10th to 90th percentile at 10 or more listings, lowest to highest below that) and confidence. Advice goes to web search and is written up by the model, with price sentences removed.
+5. **Wale's voice.** Pidgin users get a Pidgin line above the figures, and advice is generated in Pidgin.
+6. **Record.** The exchange is saved to the device's chat history, and the request is traced: stage timings, AI latency and tokens, errors.
+
+## Engineering decisions
+
+**The model reads; the database counts.** An LLM asked "what does rent cost in Yaba?" will confidently invent a number. Here the model's only job is to produce filters that are checked against a schema. Every price shown is calculated from listings, and figures inside web search results are removed before they reach the user. Wrong understanding is possible. An invented price is not.
+
+**Rules before the model.** Greetings, thanks, empty or overlong input and obvious injection attempts are handled by plain rules. That makes them instant and deterministic, keeps them out of the rate limit, and means a flood of "hi" messages costs nothing.
+
+**Rate limits sized for Lagos networks.** Many phones on Nigerian mobile networks share one public IP address. A strict per-address limit would block real people, so there are three tiers:
+
+| Tier | Default | Purpose |
+| --- | --- | --- |
+| Per device | 8 a minute, 100 a day | Stops one browser hammering the chat |
+| Per network address | 20 a minute, 400 a day | Catches scripts that rotate device IDs; looser for shared addresses |
+| Whole app | 3,000 a day | A hard ceiling on AI spend that no header can get around |
+
+Limits reset at midnight Lagos time and can be changed with environment variables. The first time a limit is hit, an alert appears on the admin Observability page, with addresses hashed.
+
+**Scraping runs on a home machine, not in the cloud.** Some listing sites refuse requests from cloud servers, so the weekly scrape runs from Windows Task Scheduler and writes to the same Supabase database the live site reads. Runs save each page as they go, resume after a stop, and are marked *interrupted* when their heartbeat goes quiet.
+
+**One web address, no CORS.** Vercel forwards `/api/*` to the Render backend, so the browser only ever talks to one origin. The admin session cookie just works, and there's no cross-origin setup to get wrong.
+
+**Observability never fails a request.** Events go through a queued writer, and timing records are best-effort. A database blip can lose a trace, but it can never fail the user's question.
+
+**Freshness over volume.** The scraper keeps only listings dated within the last 7 days. Answers say how many listings they use and how recent the newest is, so a thin answer looks thin.
+
+## Tech stack
 
 | Layer | Tools |
 | --- | --- |
-| Backend | Python 3.12, FastAPI, SQLAlchemy, Pydantic, Typer |
-| Data | PostgreSQL (Supabase), pandas, RapidFuzz |
-| AI | Groq (question understanding, guide writing), Tavily (web search) |
-| Scraping | requests, BeautifulSoup |
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS, TanStack Query; installable PWA (web manifest + service worker) |
-| Tooling | uv, Ruff, mypy, pytest, Vitest, ESLint |
-| Hosting | Vercel (frontend), Render (API), Supabase (database), Windows Task Scheduler (weekly scrape) |
+| AI | Groq (`openai/gpt-oss-120b`) for question understanding, advice and guide writing; Tavily web search |
+| Backend | Python 3.12, FastAPI, SQLAlchemy, Pydantic, Typer CLI |
+| Data | PostgreSQL on Supabase (row-level security on), pandas, RapidFuzz for "did you mean" |
+| Scraping | requests, BeautifulSoup, JSON-LD parsing |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, TanStack Query, service worker and web manifest |
+| Security | Argon2 admin passwords, HttpOnly session cookies, CSRF tokens, login lockout |
+| Tooling | uv, Ruff, pytest, Vitest, ESLint, a bundle size budget |
+| Hosting | Vercel (web), Render (API), Supabase (database), GitHub Actions (keep-awake ping), Windows Task Scheduler (weekly scrape) |
 
-### Run it locally
+## Run it locally
 
 Prerequisites: [uv](https://docs.astral.sh/uv/) (installs Python 3.12), Node.js 20+, a PostgreSQL database (Supabase works out of the box), and API keys for [Groq](https://console.groq.com) and [Tavily](https://tavily.com).
 
@@ -135,27 +170,27 @@ cd Lagos-Rent-Predictor
 cp .env.example .env                      # fill in the values below
 uv sync
 npm install --prefix frontend
-uv run python -m entrypoints.cli migrate  # create tables
+uv run python -m entrypoints.cli migrate  # create tables (safe to repeat)
 ```
 
 ```bash
 uv run uvicorn entrypoints.api:app --port 8000   # API
-npm run dev --prefix frontend                     # web app on http://localhost:5173 (proxies /api to :8000)
+npm run dev --prefix frontend                     # web app on http://localhost:5173, proxies /api to :8000
 ```
 
 ### Environment variables
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | Yes | Postgres connection string. For Supabase use the Session pooler URI. TLS is enabled automatically for remote hosts. |
-| `GROQ_API_KEY` | Yes | Understanding questions and writing area guides |
-| `TAVILY_API_KEY` | Yes | Web search for area guides and general advice |
+| `DATABASE_URL` | Yes | Postgres connection string. For Supabase, use the Session pooler URI. TLS is turned on automatically for remote hosts. |
+| `GROQ_API_KEY` | Yes | Question understanding, advice and area guides |
+| `TAVILY_API_KEY` | Yes | Web search for advice and area guides |
 | `GROQ_MODEL` | No | Defaults to `openai/gpt-oss-120b` |
-| `ALLOWED_ORIGINS` | No | Comma-separated origins allowed to call the API directly (CORS). Not needed with the Vercel proxy setup. |
-| `LIMIT_DEVICE_PER_MINUTE`, `LIMIT_DEVICE_PER_DAY` | No | Questions per device (defaults 8 a minute, 100 a day) |
-| `LIMIT_IP_PER_MINUTE`, `LIMIT_IP_PER_DAY` | No | Questions per network address (defaults 20 a minute, 400 a day; looser because mobile networks share addresses) |
-| `LIMIT_GLOBAL_PER_DAY` | No | Questions the whole app answers per day before pausing until midnight Lagos time (default 3000) |
-| `FRONTEND_URL` | No | Shown as a link when someone opens the API address directly |
+| `LIMIT_DEVICE_PER_MINUTE`, `LIMIT_DEVICE_PER_DAY` | No | Questions per device (default 8 a minute, 100 a day) |
+| `LIMIT_IP_PER_MINUTE`, `LIMIT_IP_PER_DAY` | No | Questions per network address (default 20 a minute, 400 a day) |
+| `LIMIT_GLOBAL_PER_DAY` | No | Questions the whole app answers per day (default 3,000) |
+| `FRONTEND_URL` | No | Linked from the API's root reply |
+| `ALLOWED_ORIGINS` | No | CORS origins, only needed if a browser calls the API directly (not needed with the Vercel setup) |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | No | Used once by `create-admin` |
 | `API_PROXY_TARGET` | No | Frontend dev only: where Vite proxies `/api` (default `http://localhost:8000`) |
 
@@ -169,7 +204,7 @@ uv run python -m entrypoints.cli warm-guides --top 15                           
 uv run python -m entrypoints.cli load-run                                       # load a stopped run's file
 ```
 
-**Weekly schedule (Windows).** Some listing sites refuse requests from cloud servers, so the weekly scrape runs on a local machine:
+To schedule the weekly scrape on Windows:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\register-weekly-task.ps1 -StartDate 2026-11-30
@@ -177,92 +212,120 @@ Start-ScheduledTask -TaskName "Lagos Rent weekly scrape"      # run now
 Unregister-ScheduledTask -TaskName "Lagos Rent weekly scrape" # remove
 ```
 
-The task runs every Monday at 00:00 and catches up if the machine was off. Logs go to `logs\weekly-scrape-*.log`. Runs can be stopped at any time; finished pages are kept and the next run continues from there (`--resume-hours`, default 72).
-
-`.github/workflows/weekly-scrape.yml` allows manual cloud runs (**Run workflow** in GitHub Actions) for sites that accept cloud traffic.
+The task runs every Monday at 00:00, catches up if the machine was off, and logs to `logs\weekly-scrape-*.log`. A stopped run keeps its finished pages, and the next run continues from there (`--resume-hours`, default 72).
 
 ### Admin console
 
-The admin console lives at `/admin` and is not linked from the public site. Accounts can only be created from the command line:
+The admin console lives at `/admin`. It is not linked from the public site, and accounts can only be created from the command line:
 
 ```bash
 uv run python -m entrypoints.cli create-admin
 ```
 
-It covers usage analytics, scraper operations (live progress with a Stop button), and observability: traffic, latency, errors with stack traces, AI and search calls with token counts, data quality, and a per-request trace. Sessions use Argon2-hashed passwords, HttpOnly cookies, CSRF tokens and login lockout. A run whose progress heartbeat goes quiet for 5 minutes is marked *interrupted* automatically.
+It covers:
+- **Usage analytics**
+- **Scraper operations:** live progress, with a Stop button
+- **Observability:** traffic, latency, errors with stack traces, AI and search calls with token counts, usage-limit alerts, data quality, and a full trace for each request
 
-### Deployment
-
-Three hosts, one database:
+## Deployment
 
 | Part | Host | Config |
 | --- | --- | --- |
-| Web app (installable PWA) | Vercel | `frontend/vercel.json` |
+| Web app (PWA) | Vercel | `frontend/vercel.json` |
 | API | Render | `render.yaml` (Blueprint) |
 | Database | Supabase | `DATABASE_URL` |
-| Weekly scrape | Your Windows machine | `scripts/register-weekly-task.ps1` |
+| Keep-awake ping | GitHub Actions | `.github/workflows/keep-awake.yml` |
+| Weekly scrape | A Windows machine | `scripts/register-weekly-task.ps1` |
 
-Vercel forwards `/api/*` and `/health` to the Render API, so the browser only ever talks to one address: the admin login cookie works and no CORS setup is needed.
+1. **Database.** With `DATABASE_URL` pointing at Supabase, run `uv run python -m entrypoints.cli migrate` once.
+2. **API on Render.** **New → Blueprint** → pick this repository. Render reads `render.yaml` and creates `adugbo-ai-api` (Python 3.12, `uv sync --frozen --no-dev`, health check `/health`). Add `DATABASE_URL`, `GROQ_API_KEY` and `TAVILY_API_KEY`.
+3. **Web app on Vercel.** **Add New → Project** → this repository → **Root Directory** `frontend`. No environment variables are needed: `vercel.json` forwards `/api/*` and `/health` to `https://adugbo-ai-api.onrender.com`. If Render gives the service a different address, change it there.
+4. **Keep it awake.** Render's free plan sleeps after 15 idle minutes. `keep-awake.yml` pings `/health` every 10 minutes, which costs nothing because that route touches neither the database nor the AI. GitHub pauses scheduled workflows after 60 days without commits, so re-enable it from the Actions tab if that happens.
+5. **Keep data fresh.** Leave the weekly task on. It writes to the same database, so the live site updates every Monday.
 
-1. **Merge to `main`.** Both hosts deploy from `main`.
-2. **Database.** With `DATABASE_URL` in your local `.env` pointing at Supabase, run `uv run python -m entrypoints.cli migrate` once (safe to repeat).
-3. **API on Render.** Dashboard → **New → Blueprint** → pick this repository. Render reads `render.yaml` and creates `adugbo-ai-api`. Fill in `DATABASE_URL`, `GROQ_API_KEY` and `TAVILY_API_KEY` (leave `ALLOWED_ORIGINS` empty) → **Apply**. When it is live, `https://<service>.onrender.com/health` returns `{"status":"ok"}`.
-4. **Point the web app at the API.** `frontend/vercel.json` forwards to `https://adugbo-ai-api.onrender.com`. If Render gave your service a different address, change it in the two `rewrites` lines and push.
-5. **Web app on Vercel.** **Add New → Project** → import this repository → **Root Directory** `frontend` (Vercel detects Vite: build `npm run build`, output `dist`) → no environment variables → **Deploy**.
-6. **Check it.** Open the Vercel address: ask a question, open *Your chats*, install the app, then sign in at `/admin` (accounts come from `create-admin`).
-7. **Keep data fresh.** Leave the weekly scheduled task on your machine; it writes to the same Supabase database, so the live site updates every Monday.
+Pushes to `main` redeploy both hosts, and the service worker picks up the new version on the next visit.
 
-Notes:
-
-- Render's free plan sleeps after 15 idle minutes; the first request afterwards takes about a minute and can time out once. The Starter plan stays awake.
-- Do not run *Run scrape* from the live admin: some listing sites refuse cloud servers, so a scrape from Render would miss them. Use the scheduled task.
-- Each push to `main` redeploys both automatically. The service worker picks up a new version on the next visit.
-
-### Testing and quality
+## Testing and quality
 
 ```bash
-uv run pytest                       # backend tests (never touch the real database)
+uv run pytest                       # 131 backend tests; they never touch the real database
 uv run ruff check
-npm test --prefix frontend
+npm test --prefix frontend          # 22 frontend tests
 npm run lint --prefix frontend
-npm run build --prefix frontend     # includes a bundle size budget
+npm run build --prefix frontend     # fails if the bundle size budget is exceeded
 ```
 
-### Project structure
+The tests cover:
+- answer contracts and confidence rules
+- prompt-injection and off-topic guards
+- usage limits, including the 429 reply and that blocked requests aren't counted
+- Wale's greeting, name and Pidgin detection, including spelling variants
+- chat history, and the scraper's recency filter and progress tracking
+- the admin API's authentication
+
+## Reference
+
+<details>
+<summary><b>Project structure</b></summary>
 
 ```
 admin/          Admin API: auth, analytics, operations, observability
 advice/         Web search, advice answers and area guides
-conversation/   Follow-up memory and chat history
-entrypoints/    FastAPI app, public API routes and the Typer CLI
+conversation/   Wale's persona (greetings, Pidgin), follow-up memory, chat history
+entrypoints/    FastAPI app, public routes, usage limits and the Typer CLI
 eval/           Extraction and advice evaluation sets
-observability/  Request, error, AI-call and usage event recording
+observability/  Request, error, AI-call and usage event recording; stage tracing
 pipeline/       Loader with de-duplication and a quality report
-query/          Question parsing, SQL queries, stats, trends and answer shape
-scraping/       Scrapers, location normaliser, and the scrape-and-load runner
+query/          Question parsing, SQL queries, stats, trends and the answer contract
+scraping/       Scrapers, location normaliser and the scrape-and-load runner
 scripts/        Windows scheduled-task scripts and the app icon generator
 sql/            Base schema and numbered migrations
 frontend/       React web app and admin console
 tests/          Backend tests
 ```
 
-### API overview
+</details>
+
+<details>
+<summary><b>API overview</b></summary>
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/api/chat` | Ask a question (`session_id` = chat thread id); returns a typed answer plus matching listings |
-| `GET` | `/api/areas`, `/api/areas/{area}` | Areas with typical rent; one area's rent by size and trend |
+| `POST` | `/api/chat` | Ask a question (`session_id` is the chat thread). Returns a typed answer and the matching listings; `429` with `Retry-After` when over a limit. |
+| `GET` | `/api/areas`, `/api/areas/{area}` | Areas with typical rent; one area's rent by size and its trend |
 | `GET` | `/api/areas/{area}/guide`, `/trends`, `/listings` | Area guide with sources, weekly trend, newest listings |
 | `GET` | `/api/compare?areas=A,B,C&beds=2` | Side-by-side comparison |
 | `GET` `DELETE` | `/api/me/threads`, `/api/me/threads/{id}` | Chat history for this device |
 | `GET` `POST` `DELETE` | `/api/me/saved-searches`, `/api/me/favorites` | Saved items for this device |
-| `GET` | `/health` | Health check |
+| `GET` | `/`, `/health` | What this address is; health check |
 
-Per-device endpoints need an `X-Client-Id` header (a random UUID the browser keeps). Admin endpoints live under `/api/admin` and require an admin session.
+Per-device endpoints need an `X-Client-Id` header (a random UUID kept by the browser). Admin endpoints live under `/api/admin` and need an admin session.
 
-### Data notes
+</details>
 
-- Lagos rent is quoted per year. Monthly prices are multiplied by 12. A listing with no stated period is treated as yearly.
-- Ranges use the 10th to 90th percentile once there are 10 or more listings, and lowest to highest below that.
+<details>
+<summary><b>Data notes</b></summary>
+
+- Lagos rent is quoted per year. Monthly prices are multiplied by 12, and a listing with no stated period is treated as yearly.
+- Ranges use the 10th to 90th percentile at 10 or more listings, and lowest to highest below that.
 - Confidence is *solid* at 10 or more listings, *limited* at 4 to 9, and *very little data* at 3 or fewer.
-- Some source listings tag a yearly price as monthly. These are flagged on listing cards and in the admin data-quality view.
+- Some sources tag a yearly price as monthly. These are flagged on listing cards and in the admin data-quality view.
+- Area guides are cached for 30 days, and only built for areas that have listings.
+
+</details>
+
+## Limitations and what's next
+
+- **Coverage follows the listings.** About 1,160 listings were stored at the time of writing (November 2026), concentrated in the busiest areas. Quieter areas show *limited data* or *not covered yet*, by design.
+- **Trends need time.** Week-by-week trend lines appear once an area has two or more weekly snapshots.
+- **Scrapers depend on page structure.** When a listing site changes its layout, its scraper needs updating. Blocked sites are skipped and reported rather than failing the run.
+- **Usage limits live in memory.** That's right for a single API instance. Running several instances would need a shared store such as Redis.
+- **Next:** data partnerships with listing sites instead of scraping, more sources, alerts on saved searches, and fuller Pidgin coverage of the rent cards.
+
+---
+
+<div align="center">
+
+Built by [Jaywestty](https://github.com/Jaywestty) · Prices from public listings on Nigerian property sites; area notes summarised from linked web sources.
+
+</div>
