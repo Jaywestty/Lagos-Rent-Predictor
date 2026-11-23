@@ -30,7 +30,7 @@ function buildQuestion(area: string | null, beds: string | null, budget: number 
   return beds ? `${what} rent${where}` : `How much is rent${where}?`;
 }
 
-type Exchange = { key: string; question: string; state: "pending" | "done" | "error"; result?: AskResult };
+type Exchange = { key: string; question: string; state: "pending" | "done" | "error"; result?: AskResult; limited?: string };
 
 function PlusIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden><path d="M12 5v14M5 12h14" /></svg>;
@@ -90,12 +90,14 @@ export function Chat() {
       setExchanges((xs) => xs.map((x) => (x.key === key ? { ...x, state: "done", result } : x)));
       // The first real answer creates the chat on the server (errors are not saved): put it in the
       // address so refresh or history reopens it.
-      if (result.answer && !["error", "out_of_scope"].includes(result.answer.status)) {
+      if (result.answer && !["error", "out_of_scope", "greeting"].includes(result.answer.status)) {
         if (!params.get("c")) setParams({ c: tid }, { replace: true });
         qc.invalidateQueries({ queryKey: ["threads"] });
       }
-    } catch {
-      setExchanges((xs) => xs.map((x) => (x.key === key ? { ...x, state: "error" } : x)));
+    } catch (err) {
+      // 429 = usage limit: show the server's "slow down" message instead of blaming the connection.
+      const limited = (err as { status?: number })?.status === 429 ? (err as Error).message : undefined;
+      setExchanges((xs) => xs.map((x) => (x.key === key ? { ...x, state: "error", limited } : x)));
     }
   }, [params, setParams, qc]);
 
@@ -228,8 +230,8 @@ export function Chat() {
                 {x.state === "pending" && <LoadingState text={stages[stage]} />}
                 {x.state === "error" && (
                   <section className="card p-5" role="alert">
-                    <p className="text-[15px] font-semibold">That did not go through.</p>
-                    <p className="muted mt-1 text-[14px]">Check your connection. Your question is kept.</p>
+                    <p className="text-[15px] font-semibold">{x.limited ? "Easy, one moment." : "That did not go through."}</p>
+                    <p className="muted mt-1 text-[14px]">{x.limited || "Check your connection. Your question is kept."}</p>
                     <button type="button" className="btn mt-3" onClick={() => retry(x)}>Try again</button>
                   </section>
                 )}
