@@ -53,6 +53,9 @@ class ChatAnswer(BaseModel):
     comparison: dict | None = None
     budget: dict | None = None
     no_data: dict | None = None
+    greeting: dict | None = None  # Wale's hello: title, body, what he can do, example questions
+    language: str = "en"  # "en" or "pcm" (Nigerian Pidgin), matching how the user wrote
+    lead: str | None = None  # a short Pidgin line shown above listing answers
 
 
 def compute_contract(values_by_bucket, all_values, area=None, location=None, property_type=None, data_as_of=None, request_id="", latency_ms=0.0):
