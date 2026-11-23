@@ -96,22 +96,22 @@ Wale is the assistant's persona: a house-headed robot with a map pin on his roof
 
 ```mermaid
 flowchart TB
-    subgraph Q [Every question: React PWA → Vercel → FastAPI]
+    subgraph Q ["Every question (React PWA, Vercel, FastAPI)"]
         direction LR
-        Guards[Rules: length,<br/>injection, greetings] --> Limits[Usage<br/>limits] --> LLM[Groq: question<br/>to typed filters]
-        LLM --> SQL[SQL over<br/>listings]
-        LLM --> Advice[Tavily + Groq,<br/>prices stripped]
+        Guards["Rules: length,<br/>injection, greetings"] --> Limits["Usage<br/>limits"] --> LLM["Groq: question<br/>to typed filters"]
+        LLM --> SQL["SQL over<br/>listings"]
+        LLM --> Advice["Tavily + Groq,<br/>prices stripped"]
     end
-    subgraph W [Every Monday: Windows scheduled task]
+    subgraph W ["Every Monday (Windows scheduled task)"]
         direction LR
-        Scraper[Scrape listings<br/>from the last 7 days] --> Final[De-duplicate, quality<br/>report, price snapshots]
+        Scraper["Scrape listings<br/>from the last 7 days"] --> Final["De-duplicate, quality<br/>report, price snapshots"]
     end
-    DB[(Postgres on Supabase)]
+    DB[("Postgres on Supabase")]
     SQL --> DB
-    Scraper -->|each page saved as it goes| DB
+    Scraper -->|"each page saved as it goes"| DB
     Final --> DB
-    Q -.->|traces, AI calls, errors| DB
-    Admin[Private admin console] --> Q
+    Q -.->|"traces, AI calls, errors"| DB
+    Admin["Private admin console"] --> Q
 ```
 
 What happens when someone asks **"How much be 2 bedroom for Yaba?"**:
