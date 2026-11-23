@@ -7,7 +7,8 @@ from conversation import persona
 
 
 @pytest.mark.parametrize("text", ["hi", "Hello!", "hey there", "Good morning Wale", "how far", "How you dey?",
-                                  "how are you", "bawo ni", "E kaaro", "hello adugbo ai", "wetin dey"])
+                                  "how are you", "bawo ni", "E kaaro", "hello adugbo ai", "wetin dey",
+                                  "howfar", "Howfa", "hw far boss", "watin dey", "how bodi", "howfar wale"])
 def test_greetings_are_recognised(text):
     assert persona.is_greeting(text)
 
@@ -19,7 +20,8 @@ def test_questions_with_a_greeting_are_not_just_greetings(text):
 
 
 @pytest.mark.parametrize("text", ["How much be 2 bedroom for Yaba?", "wetin 2m fit get me for Ikeja", "abeg help me",
-                                  "how far", "I wan rent house for Surulere"])
+                                  "how far", "I wan rent house for Surulere", "howfar", "watin be the rent for Ikeja",
+                                  "omo, rent for Lekki don cost", "sebi Yaba cheap pass Lekki"])
 def test_pidgin_is_detected(text):
     assert persona.language_of(text) == "pcm"
 
