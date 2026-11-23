@@ -10,15 +10,32 @@ NAME = "Wale"
 # --- language --------------------------------------------------------------------------------
 # Words and phrases that are clearly Nigerian Pidgin and rare in standard English.
 _PIDGIN = re.compile(
-    r"\b(wetin|dey|abeg|una|wey|sabi|wahala|comot|abi|nawa|oya|shey|sef|jare|ehen|pikin|"
-    r"how far|how body|how much be|i wan|e be|na im|na so|no be|make i|make we|i go like|how much e be|"
-    r"e get|e no|e don|una dey|wan rent|dem dey|na)\b",
+    r"\b(wetin|dey|abeg|una|wey|sabi|wahala|comot|abi|nawa|oya|shey|sebi|sef|jare|jor|ehen|pikin|omo|"
+    r"how far|how body|how much be|i wan|e wan|you wan|e be|na im|na so|no be|make i|make we|make una|"
+    r"i go like|how much e be|e get|e no|e don|una dey|wan rent|dem dey|na)\b",
     re.IGNORECASE,
 )
 
+# Pidgin has no fixed spelling: fold the common ways people type the same word into one form.
+_SPELLINGS = [
+    (re.compile(r"\bh(?:o)?w\s*fa(?:r|h|rr)?\b"), "how far"),  # howfar, how fa, hwfar, howfah
+    (re.compile(r"\bw(?:h)?(?:e|a)t+in\b"), "wetin"),  # watin, wettin, whetin
+    (re.compile(r"\bhow\s*bod(?:y|i)\b"), "how body"),  # howbody, how bodi
+    (re.compile(r"\babeg+[iy]?\b"), "abeg"),  # abegg, abegi
+    (re.compile(r"\bwahal+a+\b"), "wahala"),
+    (re.compile(r"\bdey+\b"), "dey"),
+]
+
+
+def normalise(text: str) -> str:
+    out = (text or "").lower()
+    for pattern, canonical in _SPELLINGS:
+        out = pattern.sub(canonical, out)
+    return out
+
 
 def is_pidgin(text: str) -> bool:
-    return bool(_PIDGIN.search(text or ""))
+    return bool(_PIDGIN.search(normalise(text)))
 
 
 def language_of(text: str) -> str:
@@ -45,7 +62,7 @@ _THANKS = {"thanks", "thank", "thx", "tnx", "ty", "appreciate", "appreciated", "
 
 
 def _words(text: str) -> list[str]:
-    cleaned = re.sub(r"[^a-z\s]", " ", (text or "").lower().replace("'", "").replace("ẹ", "e").replace("à", "a")
+    cleaned = re.sub(r"[^a-z\s]", " ", normalise(text).replace("'", "").replace("ẹ", "e").replace("à", "a")
                      .replace("á", "a").replace("ọ", "o").replace("ò", "o").replace("ó", "o"))
     return cleaned.split()
 
@@ -58,7 +75,8 @@ def is_greeting(text: str) -> bool:
     if not all(w in _CORE_GREETING or w in _FILLER for w in words):
         return False
     joined = " ".join(words)
-    return any(w in _CORE_GREETING for w in words) or "how are you" in joined or "how you" in joined
+    return (any(w in _CORE_GREETING for w in words)
+            or any(p in joined for p in ("how are you", "how you", "how body", "how una")))
 
 
 def is_thanks(text: str) -> bool:
