@@ -303,7 +303,10 @@ def query_listings(request: QueryRequest, http_request: Request):
         return _out_of_scope_payload(request_id, (time.perf_counter() - t0) * 1000, language)
     if persona.is_greeting(question) or persona.is_thanks(question):
         # Wale says hello without an AI call, so greetings are free and never count toward limits.
-        reply = persona.greeting(language) if persona.is_greeting(question) else persona.thanks(language)
+        if persona.is_greeting(question):
+            reply = persona.greeting(language, persona.introduced_name(question))
+        else:
+            reply = persona.thanks(language)
         ans = ChatAnswer(status="greeting", request_id=request_id, message=reply["text"], greeting=reply,
                          language=language, latency_ms=round((time.perf_counter() - t0) * 1000, 2))
         return {"message": reply["text"], "query_type": "greeting", "answer": ans.model_dump(mode="json")}
